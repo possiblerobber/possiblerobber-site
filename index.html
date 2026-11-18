@@ -24,6 +24,9 @@
       <nav class="nav" aria-label="Workspace">
         <button type="button" class="active" aria-current="page" data-page="overview"><b>◫</b> Overview</button>
         <button type="button" data-page="markets"><b>⌁</b> Market view</button>
+        <button type="button" data-page="dashboard"><b>▦</b> Market dashboard</button>
+        <button type="button" data-page="monitor"><b>♡</b> Risk monitor</button>
+        <button type="button" data-page="macro"><b>⌂</b> Macro &amp; Fed</button>
         <button type="button" data-page="movers"><b>▲</b> Movers</button>
         <button type="button" data-page="sp500"><b>⌕</b> S&amp;P 500 scan</button>
         <button type="button" data-page="squeeze"><b>⚡</b> Short squeeze</button>
@@ -156,7 +159,7 @@
       </section>
     </div>
 
-    <!-- ===== Market view: Perspective grid mounts here (js/perspective-market.js) ===== -->
+    <!-- ===== Market view: Perspective mounts here (see INSTALL-PERSPECTIVE.md) ===== -->
     <div class="page" data-page="markets" hidden>
       <div class="card">
         <div id="perspective-mount">
@@ -169,6 +172,9 @@
     </div>
 
     <!-- ===== Placeholder pages ===== -->
+    <div class="page" data-page="dashboard" hidden><div class="card screen"></div></div>
+    <div class="page" data-page="monitor" hidden><div class="card screen"></div></div>
+    <div class="page" data-page="macro" hidden><div class="card screen"></div></div>
     <div class="page" data-page="movers" hidden><div class="card screen"></div></div>
     <div class="page" data-page="sp500" hidden><div class="card screen"></div></div>
     <div class="page" data-page="squeeze" hidden><div class="card screen"></div></div>
