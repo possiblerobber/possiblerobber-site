@@ -6,6 +6,7 @@
   <title>PossibleRobber — Market Terminal</title>
   <meta name="description" content="PossibleRobber market education workspace. Demo figures only.">
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/screens.css">
   <link rel="stylesheet" crossorigin="anonymous" href="https://cdn.jsdelivr.net/npm/@perspective-dev/viewer/dist/css/themes.css">
 </head>
 <body>
@@ -23,7 +24,10 @@
       <nav class="nav" aria-label="Workspace">
         <button type="button" class="active" aria-current="page" data-page="overview"><b>◫</b> Overview</button>
         <button type="button" data-page="markets"><b>⌁</b> Market view</button>
-        <button type="button" data-page="scanner"><b>⌕</b> Stock scanner</button>
+        <button type="button" data-page="movers"><b>▲</b> Movers</button>
+        <button type="button" data-page="sp500"><b>⌕</b> S&amp;P 500 scan</button>
+        <button type="button" data-page="squeeze"><b>⚡</b> Short squeeze</button>
+        <button type="button" data-page="stock"><b>◔</b> Stock chart</button>
         <button type="button" data-page="watchlist"><b>☆</b> Watchlist</button>
         <button type="button" data-page="journal"><b>▤</b> Paper journal</button>
       </nav>
@@ -163,7 +167,10 @@
     </div>
 
     <!-- ===== Placeholder pages ===== -->
-    <div class="page" data-page="scanner" hidden><div class="card placeholder"><h2>Stock scanner</h2><p>Coming soon.</p></div></div>
+    <div class="page" data-page="movers" hidden><div class="card screen"></div></div>
+    <div class="page" data-page="sp500" hidden><div class="card screen"></div></div>
+    <div class="page" data-page="squeeze" hidden><div class="card screen"></div></div>
+    <div class="page" data-page="stock" hidden><div class="card screen"></div></div>
     <div class="page" data-page="watchlist" hidden><div class="card placeholder"><h2>Watchlist</h2><p>Coming soon.</p></div></div>
     <div class="page" data-page="journal" hidden><div class="card placeholder"><h2>Paper-trading journal</h2><p>Coming soon.</p></div></div>
     <div class="page" data-page="risk" hidden><div class="card placeholder"><h2>Risk concepts</h2><p>Coming soon.</p></div></div>
@@ -173,7 +180,9 @@
   </main>
 </div>
 
+<script src="js/config.js"></script>
 <script src="js/app.js"></script>
+<script src="js/screens.js"></script>
 <script type="module" src="js/perspective-market.js"></script>
 </body>
 </html>
