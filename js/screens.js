@@ -59,7 +59,7 @@
 
   const f2 = (n) => (n == null ? "—" : Number(n).toFixed(2));
   const pct = (n) => (n == null ? "—" : (n >= 0 ? "+" : "") + Number(n).toFixed(2) + "%");
-  const big = (n) => (n == null ? "—" : n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(0) + "K" : String(n));
+  const big = (n) => (n == null ? "—" : n >= 1e12 ? (n / 1e12).toFixed(2) + "T" : n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(0) + "K" : String(n));
   const S = (key, label) => ({ key, label });
   const N = (key, label, fmt) => ({ key, label, fmt, num: true });
 
@@ -234,8 +234,11 @@
     holders: (d) => "<h3 class=\"pad\">Institutional holders</h3>" + holderTable(d.holders, [S("holder", "Holder"), N("shares", "Shares", big), N("value", "Value", big), S("date", "Reported")]) +
       "<h3 class=\"pad\">Insider transactions</h3>" + holderTable(d.insiders, [S("insider", "Insider"), S("transaction", "Transaction"), N("shares", "Shares", big), N("value", "Value", big)]) +
       "<h3 class=\"pad\">Ownership summary</h3>" + holderTable(d.major, [S("label", "Item"), S("value", "Value")]),
+    buybacks: (d) => kv({ buyback_yield: d.buyback_yield == null ? null : d.buyback_yield.toFixed(2) + "%", shares_outstanding: d.shares_outstanding == null ? null : big(d.shares_outstanding), market_cap: d.market_cap == null ? null : big(d.market_cap) }, []) +
+      "<h3 class=\"pad\">Share repurchases by fiscal year</h3>" + (d.annual.length ? holderTable(d.annual, [S("year", "Year"), N("repurchased", "Repurchased ($)", big)]) : '<p class="pad sub">No repurchase history available.</p>') +
+      '<p class="pad sub">Buyback yield is trailing repurchases as a percent of market cap (TradingView). Buybacks can be paused or reversed and are not a prediction of returns.</p>',
   };
-  const DETAIL_TABS = [["analysis", "Analysis"], ["technicals", "Technicals"], ["fundamentals", "Fundamentals"], ["timeframes", "Timeframes"], ["news", "News"], ["earnings", "Earnings"], ["options", "Options"], ["holders", "Holders"]];
+  const DETAIL_TABS = [["analysis", "Analysis"], ["technicals", "Technicals"], ["fundamentals", "Fundamentals"], ["timeframes", "Timeframes"], ["news", "News"], ["earnings", "Earnings"], ["options", "Options"], ["holders", "Holders"], ["buybacks", "Buybacks"]];
 
   function mountCompare() {
     const root = $('.page[data-page="compare"] .screen');
@@ -305,7 +308,13 @@
 
   function mountPortfolio() {
     const root = $('.page[data-page="portfolio"] .screen');
-    root.innerHTML = `<form class="stock-form" id="pf-form">
+    root.innerHTML = `<div class="stock-form" id="pf-profiles">
+        <select id="pf-profile" aria-label="Portfolio profile"></select>
+        <input id="pf-pname" placeholder="Profile name" maxlength="30" aria-label="Profile name" style="text-transform:none;width:150px">
+        <button class="btn ghost" type="button" data-act="add">Add profile</button>
+        <button class="btn ghost" type="button" data-act="rename">Rename</button>
+        <button class="btn ghost" type="button" data-act="delete">Delete</button></div>
+      <form class="stock-form" id="pf-form">
         <input id="pf-sym" placeholder="Ticker" maxlength="10" aria-label="Ticker" autocomplete="off" spellcheck="false" required>
         <input id="pf-shares" type="number" step="any" min="0" placeholder="Shares" aria-label="Shares" style="text-transform:none" required>
         <input id="pf-cost" type="number" step="any" min="0" placeholder="Cost / share" aria-label="Cost per share" style="text-transform:none" required>
@@ -315,50 +324,97 @@
     const msg = (t, bad) => flash($("#pf-msg"), t, bad);
     const strip = (r) => ({ symbol: r.symbol, shares: r.shares, cost: r.cost, opened: r.opened, note: r.note });
     const key = (r) => [r.symbol, r.shares, r.cost, r.opened || ""].join("|");
-    let busy = false;
+    let busy = false, profiles = [], current = "main", armed = false;
+    try { current = localStorage.getItem("pr-profile") || "main"; } catch (_) {}
+    const pname = (id) => (profiles.find((x) => x.id === id) || {}).name || id;
+    function drawProfiles() {
+      if (current !== "all" && !profiles.some((x) => x.id === current)) current = profiles.length ? profiles[0].id : "main";
+      try { localStorage.setItem("pr-profile", current); } catch (_) {}
+      $("#pf-profile").innerHTML = profiles.map((x) => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("") + (profiles.length > 1 ? '<option value="all">All profiles (combined)</option>' : "");
+      $("#pf-profile").value = current;
+      const all = current === "all";
+      $("#pf-form").hidden = all;
+      $('#pf-profiles [data-act="rename"]').disabled = all; $('#pf-profiles [data-act="delete"]').disabled = all || profiles.length < 2;
+    }
     function render(d) {
-      const t = d.totals;
+      const t = d.totals, all = d.profile === "all";
       const cards = [
         card("Market value", `<div class="mval">${esc(usd(t.value))}</div>`),
         card("Cost basis", `<div class="mval">${esc(usd(t.cost))}</div>`),
         card("Total P/L", `<div class="mval ${sgn(t.pnl)}">${esc(usd(t.pnl))}</div><div class="${sgn(t.pnl_pct)}">${esc(pct(t.pnl_pct))}</div>`),
-        card("Day P/L", `<div class="mval ${sgn(t.day_pnl)}">${esc(usd(t.day_pnl))}</div>`),
+        card("Day P/L", `<div class="mval ${sgn(t.day_pnl)}">${esc(usd(t.day_pnl))}</div>${t.day_pct == null ? "" : `<div class="${sgn(t.day_pct)}">${esc(pct(t.day_pct))}</div>`}`),
       ].join("");
-      if (!d.positions.length) return `<div class="mgrid">${cards}</div><p class="sub pad">No positions yet. Add one above.</p>`;
-      const rows = d.positions.map((r) => `<tr><td>${esc(r.symbol)}</td><td class="num">${esc(r.shares)}</td><td class="num">${esc(usd(r.cost))}</td>
+      if (!d.positions.length) return `<div class="mgrid">${cards}</div><p class="sub pad">No positions in ${esc(all ? "any profile" : pname(d.profile))} yet.${all ? "" : " Add one above."}</p>`;
+      const rows = d.positions.map((r) => `<tr>${all ? `<td>${esc(r.profile_name)}</td>` : ""}<td>${esc(r.symbol)}</td><td class="num">${esc(r.shares)}</td><td class="num">${esc(usd(r.cost))}</td>
         <td class="num">${esc(usd(r.price))}</td><td class="num">${esc(usd(r.value))}</td><td class="num ${sgn(r.pnl)}">${esc(usd(r.pnl))}</td>
         <td class="num ${sgn(r.pnl_pct)}">${esc(pct(r.pnl_pct))}</td><td class="num ${sgn(r.day_change_pct)}">${esc(pct(r.day_change_pct))}</td>
         <td class="num">${r.weight_pct == null ? "—" : esc(r.weight_pct.toFixed(1)) + "%"}</td><td>${esc(r.opened || "")}</td>
-        <td><button type="button" class="btn small" data-rm="${esc(key(r))}" aria-label="Remove ${esc(r.symbol)}">Remove</button></td></tr>`).join("");
+        <td>${all ? "" : `<button type="button" class="btn small" data-rm="${esc(key(r))}" aria-label="Remove ${esc(r.symbol)}">Remove</button>`}</td></tr>`).join("");
       const warn = t.missing_prices ? `<p class="sub pad negative">${esc(t.missing_prices)} position(s) have no live price right now and aren't in the totals.</p>` : "";
-      return `<div class="mgrid">${cards}</div>${warn}<div class="table-scroll"><table class="table"><thead><tr><th>Symbol</th><th>Shares</th><th>Cost</th><th>Price</th><th>Value</th><th>P/L</th><th>P/L %</th><th>Day</th><th>Weight</th><th>Opened</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      return `<div class="mgrid">${cards}</div>${warn}<div class="table-scroll"><table class="table"><thead><tr>${all ? "<th>Profile</th>" : ""}<th>Symbol</th><th>Shares</th><th>Cost</th><th>Price</th><th>Value</th><th>P/L</th><th>P/L %</th><th>Day</th><th>Weight</th><th>Opened</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+    async function loadView() {
+      let d;
+      try { d = await api("/api/user/portfolio?profile=" + encodeURIComponent(current)); }
+      catch (e) { if (current === "main" || !/unknown profile/.test(e.message)) throw e; current = "main"; d = await api("/api/user/portfolio?profile=main"); }
+      profiles = d.profiles; drawProfiles(); $("#pf-body").innerHTML = render(d); return d;
     }
     async function save(mutator, ok) {
       if (busy) return; busy = true; msg("Saving…");
       try {
-        const cur = await api("/api/user/portfolio");
-        const d = await send("/api/user/portfolio", { positions: mutator(cur.positions.map(strip)) });
-        $("#pf-body").innerHTML = render(d); msg(ok);
+        const cur = await api("/api/user/portfolio?profile=" + encodeURIComponent(current));
+        const d = await send("/api/user/portfolio", { profile: current, positions: mutator(cur.positions.map(strip)) });
+        profiles = d.profiles; $("#pf-body").innerHTML = render(d); msg(ok); return true;
       } catch (e) { msg("Couldn't save: " + e.message, true); } finally { busy = false; }
     }
+    async function saveProfiles(next, ok, then) {
+      if (busy) return; busy = true; msg("Saving…");
+      try {
+        const out = await send("/api/user/profiles", { profiles: next }); profiles = out.profiles;
+        if (then) then(); drawProfiles(); await loadView(); msg(ok);
+      } catch (e) { msg("Couldn't save: " + e.message, true); } finally { busy = false; }
+    }
+    const slug = (name) => {
+      const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 16) || "profile";
+      let id = base, n = 2; while (profiles.some((x) => x.id === id) || id === "all") id = base + "-" + n++; return id;
+    };
+    $("#pf-profile").addEventListener("change", () => {
+      current = $("#pf-profile").value; armed = false;
+      try { localStorage.setItem("pr-profile", current); } catch (_) {}
+      drawProfiles(); msg(""); $("#pf-body").innerHTML = '<p class="sub pad">Loading…</p>';
+      loadView().catch((e) => { $("#pf-body").innerHTML = `<p class="sub pad negative">Couldn't load: ${esc(e.message)}</p>`; });
+    });
+    $("#pf-profiles").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-act]"); if (!b) return;
+      const name = $("#pf-pname").value.trim().replace(/\s+/g, " "), act = b.dataset.act;
+      if (act === "delete") {
+        if (!armed) { armed = true; return msg(`Click Delete again to remove "${pname(current)}" and all of its positions.`, true); }
+        armed = false; return saveProfiles(profiles.filter((x) => x.id !== current), "Profile deleted.", () => { current = profiles[0].id; });
+      }
+      armed = false;
+      if (!name) return msg("Type a profile name first.", true);
+      if (act === "add") { const id = slug(name); return saveProfiles(profiles.concat([{ id, name }]), "Profile added.", () => { current = id; try { localStorage.setItem("pr-profile", id); } catch (_) {} $("#pf-pname").value = ""; }); }
+      if (act === "rename") return saveProfiles(profiles.map((x) => (x.id === current ? { id: x.id, name } : x)), "Renamed.", () => { $("#pf-pname").value = ""; });
+    });
     $("#pf-form").addEventListener("submit", (e) => {
       e.preventDefault();
       const symbol = $("#pf-sym").value.trim().toUpperCase(), shares = Number($("#pf-shares").value), cost = Number($("#pf-cost").value);
       if (!symbol || !(shares > 0) || !(cost >= 0)) return msg("Enter a ticker, shares above 0 and a cost per share.", true);
       const opened = $("#pf-date").value || null;
-      save((list) => list.concat([{ symbol, shares, cost, opened, note: "" }]), "Added " + symbol + ".").then(() => { if (!$("#pf-msg").classList.contains("negative")) $("#pf-form").reset(); });
+      save((list) => list.concat([{ symbol, shares, cost, opened, note: "" }]), "Added " + symbol + " to " + pname(current) + ".").then((ok) => { if (ok) $("#pf-form").reset(); });
     });
     $("#pf-body").addEventListener("click", (e) => {
       const b = e.target.closest("button[data-rm]"); if (!b) return;
       const k = b.dataset.rm; let gone = false;
       save((list) => list.filter((r) => (!gone && key(r) === k) ? !(gone = true) : true), "Removed.");
     });
+    loadView().catch((e) => { $("#pf-body").innerHTML = `<p class="sub pad negative">Couldn't load data: ${esc(e.message)}</p>`; });
     const push = $("#pf-push"), pmsg = (t, bad) => flash($("#pa-msg"), t, bad);
     async function loadPush() {
       try {
         const st = await api("/api/user/settings"), pa = st.portfolio_alert;
         push.innerHTML = `<h3 class="pad">Phone alert</h3><form class="stock-form" id="pa-form">
-          <label class="chk"><input type="checkbox" id="pa-on" ${pa.enabled ? "checked" : ""}> Message me if my portfolio is down</label>
+          <label class="chk"><input type="checkbox" id="pa-on" ${pa.enabled ? "checked" : ""}> Message me if a portfolio is down</label>
           <input id="pa-pct" type="number" step="any" min="0.5" max="50" value="${esc(pa.drop_pct)}" style="width:80px;text-transform:none" aria-label="Drop percent"> % or more today
           <button class="btn" type="submit">Save</button> <button class="btn ghost" type="button" id="pa-test">Send test</button></form>
           <p class="sub pad" id="pa-msg" role="status">${st.push_configured ? "" : "Phone push isn't set up on the server yet."}</p>
@@ -376,7 +432,6 @@
       catch (err) { pmsg("Couldn't send: " + err.message, true); }
     });
     loadPush();
-    panel($("#pf-body"), () => api("/api/user/portfolio"), render);
   }
 
   // Alerts: the server checks them whenever this site is open (any page) and marks each one triggered once.
@@ -469,7 +524,7 @@
       '<h3 class="pad">Your watchlist</h3><div id="ov-wl"></div><h3 class="pad">Top movers today</h3><div id="ov-mv"></div>' + FOOT;
     panel($("#ov-idx"), () => api("/api/market/overview"), (rows) => '<div class="mgrid">' + rows.map((r) =>
       card(r.name, `<div class="mval">${esc(f2(r.value))}</div><div class="${sgn(r.change_pct)}">${esc(pct(r.change_pct))}</div>`)).join("") + "</div>");
-    panel($("#ov-pf"), () => api("/api/user/portfolio"), (d) => {
+    panel($("#ov-pf"), () => api("/api/user/portfolio?profile=all"), (d) => {
       if (!d.positions.length) return '<p class="sub pad">No positions yet. Add them on the Portfolio page.</p>';
       const t = d.totals;
       return '<div class="mgrid">' + [
@@ -490,6 +545,25 @@
   }
   mountOverview();
 
+  // ---------- Insiders & buybacks ----------
+  function mountInsiders() {
+    const root = $('.page[data-page="insiders"] .screen');
+    root.innerHTML = '<h3 class="pad">Insider buying</h3><div id="in-buy"></div><h3 class="pad">Insider selling</h3><div id="in-sell"></div>' +
+      '<h3 class="pad">Buyback leaders (S&amp;P 500)</h3><div id="in-bb"></div>' +
+      '<p class="sub pad">Insider trades are SEC Form 4 filings, listed by OpenInsider (the filing can be a few days after the trade). Insiders sell for many reasons, such as taxes or diversifying, so a sale is not a signal by itself. Buyback yield is trailing repurchases as a percent of market cap. Educational only, not financial advice.</p>';
+    const open = (s) => `<button type="button" class="linkbtn" data-open="${esc(s)}">${esc(s)}</button>`;
+    const insCols = [["filing_date", "Filed"], ["symbol", "Symbol"], ["company", "Company"], ["insider", "Insider"], ["title", "Title"]];
+    const insTable = (rows) => !rows ? '<p class="sub pad negative">This list is unavailable right now.</p>' : !rows.length ? '<p class="sub pad">Nothing to show.</p>' :
+      '<div class="table-scroll"><table class="table"><thead><tr><th>Filed</th><th>Symbol</th><th>Company</th><th>Insider</th><th>Title</th><th>Price</th><th>Shares</th><th>Value</th><th>Own Δ</th></tr></thead><tbody>' +
+      rows.map((r) => `<tr><td>${esc(r.filing_date)}</td><td>${open(r.symbol)}</td><td>${esc(r.company)}</td><td>${esc(r.insider)}</td><td>${esc(r.title)}</td><td class="num">${esc(f2(r.price))}</td><td class="num">${esc(r.shares == null ? "—" : Math.abs(r.shares).toLocaleString("en-US"))}</td><td class="num">${esc(r.value == null ? "—" : usd(Math.abs(r.value)))}</td><td class="num ${sgn(r.own_change_pct)}">${esc(pct(r.own_change_pct))}</td></tr>`).join("") + "</tbody></table></div>";
+    const feed = api("/api/scan/insiders");
+    panel($("#in-buy"), () => feed, (d) => insTable(d.buys));
+    feed.then((d) => { $("#in-sell").innerHTML = insTable(d.sells); }).catch((e) => { $("#in-sell").innerHTML = `<p class="sub pad negative">Couldn't load data: ${esc(e.message)}</p>`; });
+    panel($("#in-bb"), () => api("/api/scan/buybacks"), (rows) => '<div class="table-scroll"><table class="table"><thead><tr><th>Symbol</th><th>Name</th><th>Sector</th><th>Price</th><th>Day</th><th>Buyback yield</th><th>Mkt cap</th></tr></thead><tbody>' +
+      rows.map((r) => `<tr><td>${open(r.symbol)}</td><td>${esc(r.name)}</td><td>${esc(r.sector || "")}</td><td class="num">${esc(f2(r.price))}</td><td class="num ${sgn(r.change_pct)}">${esc(pct(r.change_pct))}</td><td class="num">${esc(f2(r.buyback_yield))}%</td><td class="num">${esc(big(r.market_cap))}</td></tr>`).join("") + "</tbody></table></div>");
+    root.onclick = (e) => { const b = e.target.closest("button[data-open]"); if (b) openStock(b.dataset.open); };
+  }
+
   // Lazy-start each screen the first time its nav button is clicked.
   const started = new Set();
   document.addEventListener("click", (e) => {
@@ -503,6 +577,7 @@
     else if (page === "dashboard") { started.add(page); mountDashboard(); }
     else if (page === "monitor") { started.add(page); mountMonitor(); }
     else if (page === "macro") { started.add(page); mountMacro(); }
+    else if (page === "insiders") { started.add(page); mountInsiders(); }
     else if (page === "portfolio") { started.add(page); mountPortfolio(); }
     else if (page === "watchlist") { started.add(page); mountWatchlist(); }
   });
