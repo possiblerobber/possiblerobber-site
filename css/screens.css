@@ -31,3 +31,7 @@
 .screen td button.btn{background:transparent;color:#8b98a9;border:1px solid #263444;border-radius:6px;padding:4px 10px;cursor:pointer}
 .mval.positive{color:#35d39a}.mval.negative{color:#ff687a}
 td.positive{color:#35d39a}
+.linkbtn{background:none;border:0;color:#6aa8ff;font:inherit;font-weight:600;cursor:pointer;padding:0}
+.linkbtn:hover{text-decoration:underline}
+.chk{display:flex;gap:8px;align-items:center}
+.stock-form .chk input{width:auto}
