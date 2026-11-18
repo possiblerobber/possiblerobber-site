@@ -17,7 +17,10 @@
   const PAGE_TITLES = {
     overview:  "Market overview",
     markets:   "Market view",
-    scanner:   "Stock scanner",
+    movers:    "Market movers",
+    sp500:     "S&P 500 scan",
+    squeeze:   "Short squeeze scanner",
+    stock:     "Stock chart",
     watchlist: "Watchlist",
     journal:   "Paper-trading journal",
     risk:      "Risk concepts",
