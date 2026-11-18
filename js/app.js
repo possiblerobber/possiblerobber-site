@@ -26,7 +26,8 @@
     stock:     "Stock chart",
     compare:   "Compare stocks",
     scanners:  "Scanners",
-    watchlist: "Watchlist",
+    portfolio: "Portfolio",
+    watchlist: "Watchlist & alerts",
     journal:   "Paper-trading journal",
     risk:      "Risk concepts",
     notes:     "Research notes",
@@ -114,7 +115,7 @@
     });
     $$(".page").forEach((p) => { p.hidden = p.dataset.page !== page; });
     $("#page-title").textContent = PAGE_TITLES[page] || PAGE_TITLES.overview;
-    const live = ["dashboard", "monitor", "macro", "movers", "sp500", "squeeze", "stock", "compare", "scanners"].includes(page);
+    const live = ["portfolio", "watchlist", "dashboard", "monitor", "macro", "movers", "sp500", "squeeze", "stock", "compare", "scanners"].includes(page);
     const pill = $("#data-pill");
     if (pill) { pill.textContent = live ? "● LIVE · may be delayed" : "● DEMO DATA"; pill.classList.toggle("demo", !live); }
     $("#sidebar").classList.remove("open");
