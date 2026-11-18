@@ -311,7 +311,7 @@
         <input id="pf-cost" type="number" step="any" min="0" placeholder="Cost / share" aria-label="Cost per share" style="text-transform:none" required>
         <input id="pf-date" type="date" aria-label="Date opened (optional)" style="text-transform:none;width:150px">
         <button class="btn" type="submit">Add position</button></form>
-      <p class="sub pad" id="pf-msg" role="status"></p><div id="pf-body"></div>` + PFOOT;
+      <p class="sub pad" id="pf-msg" role="status"></p><div id="pf-body"></div><div id="pf-push"></div>` + PFOOT;
     const msg = (t, bad) => flash($("#pf-msg"), t, bad);
     const strip = (r) => ({ symbol: r.symbol, shares: r.shares, cost: r.cost, opened: r.opened, note: r.note });
     const key = (r) => [r.symbol, r.shares, r.cost, r.opened || ""].join("|");
@@ -353,6 +353,29 @@
       const k = b.dataset.rm; let gone = false;
       save((list) => list.filter((r) => (!gone && key(r) === k) ? !(gone = true) : true), "Removed.");
     });
+    const push = $("#pf-push"), pmsg = (t, bad) => flash($("#pa-msg"), t, bad);
+    async function loadPush() {
+      try {
+        const st = await api("/api/user/settings"), pa = st.portfolio_alert;
+        push.innerHTML = `<h3 class="pad">Phone alert</h3><form class="stock-form" id="pa-form">
+          <label class="chk"><input type="checkbox" id="pa-on" ${pa.enabled ? "checked" : ""}> Message me if my portfolio is down</label>
+          <input id="pa-pct" type="number" step="any" min="0.5" max="50" value="${esc(pa.drop_pct)}" style="width:80px;text-transform:none" aria-label="Drop percent"> % or more today
+          <button class="btn" type="submit">Save</button> <button class="btn ghost" type="button" id="pa-test">Send test</button></form>
+          <p class="sub pad" id="pa-msg" role="status">${st.push_configured ? "" : "Phone push isn't set up on the server yet."}</p>
+          <p class="sub pad">Checked every 5 minutes during US market hours, even when this site is closed, with one message per trading day. Messages show percentages only, never dollar amounts.</p>`;
+      } catch (e) { push.innerHTML = `<p class="sub pad negative">Couldn't load phone alert settings: ${esc(e.message)}</p>`; }
+    }
+    push.addEventListener("submit", async (e) => {
+      e.preventDefault(); pmsg("Saving…");
+      try { await send("/api/user/settings", { portfolio_alert: { enabled: $("#pa-on").checked, drop_pct: Number($("#pa-pct").value) } }); pmsg("Saved."); }
+      catch (err) { pmsg("Couldn't save: " + err.message, true); }
+    });
+    push.addEventListener("click", async (e) => {
+      if (!e.target.closest("#pa-test")) return; pmsg("Sending…");
+      try { await send("/api/user/push-test", {}); pmsg("Test message sent. Check your phone."); }
+      catch (err) { pmsg("Couldn't send: " + err.message, true); }
+    });
+    loadPush();
     panel($("#pf-body"), () => api("/api/user/portfolio"), render);
   }
 
@@ -434,11 +457,46 @@
   }
   startPoll();
 
+  // ---------- Overview (live) ----------
+  function openStock(symbol) {
+    const nav = $('.nav button[data-page="stock"]'); if (nav) nav.click();
+    const input = $("#stock-input"), form = $("#stock-form");
+    if (input && form) { input.value = symbol; form.requestSubmit(); }
+  }
+  function mountOverview() {
+    const root = $('.page[data-page="overview"] .screen');
+    root.innerHTML = '<h3 class="pad">Markets</h3><div id="ov-idx"></div><h3 class="pad">Your portfolio</h3><div id="ov-pf"></div>' +
+      '<h3 class="pad">Your watchlist</h3><div id="ov-wl"></div><h3 class="pad">Top movers today</h3><div id="ov-mv"></div>' + FOOT;
+    panel($("#ov-idx"), () => api("/api/market/overview"), (rows) => '<div class="mgrid">' + rows.map((r) =>
+      card(r.name, `<div class="mval">${esc(f2(r.value))}</div><div class="${sgn(r.change_pct)}">${esc(pct(r.change_pct))}</div>`)).join("") + "</div>");
+    panel($("#ov-pf"), () => api("/api/user/portfolio"), (d) => {
+      if (!d.positions.length) return '<p class="sub pad">No positions yet. Add them on the Portfolio page.</p>';
+      const t = d.totals;
+      return '<div class="mgrid">' + [
+        card("Market value", `<div class="mval">${esc(usd(t.value))}</div>`),
+        card("Day P/L", `<div class="mval ${sgn(t.day_pnl)}">${esc(usd(t.day_pnl))}</div>${t.day_pct == null ? "" : `<div class="${sgn(t.day_pct)}">${esc(pct(t.day_pct))}</div>`}`),
+        card("Total P/L", `<div class="mval ${sgn(t.pnl)}">${esc(usd(t.pnl))}</div><div class="${sgn(t.pnl_pct)}">${esc(pct(t.pnl_pct))}</div>`),
+      ].join("") + "</div>";
+    });
+    panel($("#ov-wl"), () => api("/api/user/watchlist"), (d) => !d.quotes.length
+      ? '<p class="sub pad">Nothing on your watchlist yet. Add tickers on the Watchlist &amp; alerts page.</p>'
+      : '<div class="table-scroll"><table class="table"><thead><tr><th>Symbol</th><th>Price</th><th>Day</th></tr></thead><tbody>' + d.quotes.map((q) =>
+        `<tr><td><button type="button" class="linkbtn" data-open="${esc(q.symbol)}">${esc(q.symbol)}</button></td><td class="num">${esc(usd(q.price))}</td><td class="num ${sgn(q.change_pct)}">${esc(pct(q.change_pct))}</td></tr>`).join("") + "</tbody></table></div>");
+    panel($("#ov-mv"), () => Promise.all([api("/api/movers/gainers"), api("/api/movers/losers")]), ([g, l]) => {
+      const cols = [S("symbol", "Symbol"), N("price", "Price", f2), T("change_pct", "Change", pct)];
+      return '<p class="sub pad">Top 5 gainers</p>' + tableHtml(g.slice(0, 5), cols) + '<p class="sub pad">Top 5 losers</p>' + tableHtml(l.slice(0, 5), cols);
+    });
+    root.onclick = (e) => { const b = e.target.closest("button[data-open]"); if (b) openStock(b.dataset.open); };
+  }
+  mountOverview();
+
   // Lazy-start each screen the first time its nav button is clicked.
   const started = new Set();
   document.addEventListener("click", (e) => {
     const b = e.target.closest(".nav button[data-page]"); if (!b) return;
-    const page = b.dataset.page; if (started.has(page)) return;
+    const page = b.dataset.page;
+    if (page === "overview") { mountOverview(); return; }
+    if (started.has(page)) return;
     if (SCREENS[page]) { started.add(page); mountScreen(page); }
     else if (page === "stock") { started.add(page); mountStock(); }
     else if (page === "compare") { started.add(page); mountCompare(); }
