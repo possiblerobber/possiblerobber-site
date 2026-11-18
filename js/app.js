@@ -13,6 +13,7 @@
     squeeze:   "Short squeeze scanner",
     stock:     "Stock chart",
     compare:   "Compare stocks",
+    insiders:  "Insiders & buybacks",
     scanners:  "Scanners",
     portfolio: "Portfolio",
     watchlist: "Watchlist & alerts",
