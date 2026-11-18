@@ -38,7 +38,7 @@
   function plainTable(mount, rows, columns) {
     const head = columns.map((c) => `<th>${esc(c.label)}</th>`).join("");
     const body = rows.map((r) => "<tr>" + columns.map((c) =>
-      `<td class="${c.num ? "num" : ""}">${esc(c.fmt ? c.fmt(r[c.key]) : r[c.key])}</td>`).join("") + "</tr>").join("");
+      `<td class="${c.num ? "num" : ""}${c.tone && r[c.key] != null ? (r[c.key] >= 0 ? " positive" : " negative") : ""}">${esc(c.fmt ? c.fmt(r[c.key]) : r[c.key])}</td>`).join("") + "</tr>").join("");
     mount.innerHTML = `<div class="table-scroll"><table class="table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
   }
 
@@ -147,6 +147,64 @@
     return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(d.symbol)} candlestick chart">${s}</svg>`;
   }
 
+  // ---------- market dashboards ----------
+  const T = (key, label, fmt) => ({ key, label, fmt, num: true, tone: true });
+  const na = (v, f = (x) => x) => (v == null ? "N/A" : f(v));
+  const card = (title, body) => `<div class="mcard"><div class="mlabel">${esc(title)}</div>${body}</div>`;
+  const tableHtml = (rows, cols) => { const d = document.createElement("div"); plainTable(d, rows, cols); return d.innerHTML; };
+  async function panel(root, loader, render) {
+    root.innerHTML = '<p class="sub pad">Loading…</p>';
+    try { root.innerHTML = render(await loader()); }
+    catch (e) { root.innerHTML = `<p class="sub pad negative">Couldn't load data: ${esc(e.message)}</p>`; }
+  }
+  const FOOT = '<p class="sub pad">Educational information only, not financial advice. Data may be delayed; unavailable sources show N/A.</p>';
+
+  function mountDashboard() {
+    const root = $('.page[data-page="dashboard"] .screen');
+    root.innerHTML = '<div id="d-idx"></div><h3 class="pad">Sector performance</h3><div id="d-sec"></div><h3 class="pad">Macro snapshot</h3><div id="d-mac"></div>' + FOOT;
+    panel($("#d-idx"), () => api("/api/market/overview"), (rows) => '<div class="mgrid">' + rows.map((r) =>
+      card(r.name, `<div class="mval">${esc(f2(r.value))}</div><div class="${r.change_pct >= 0 ? "positive" : "negative"}">${esc(pct(r.change_pct))}</div>`)).join("") + "</div>");
+    panel($("#d-sec"), () => api("/api/market/sectors"), (rows) => '<p class="sub pad">Ranked by 1-month return. Rotation shows relative performance, not a prediction.</p>' +
+      tableHtml(rows, [N("rank_1m", "#", String), S("name", "Sector"), S("symbol", "ETF"), T("d5", "5D", pct), T("d21", "1M", pct), T("d63", "3M", pct)]));
+    panel($("#d-mac"), () => api("/api/market/macro"), (rows) => tableHtml(rows, [S("name", "Asset"), S("symbol", "Symbol"), N("value", "Value", f2), T("change_pct", "Day", pct)]));
+  }
+
+  function mountMonitor() {
+    const root = $('.page[data-page="monitor"] .screen');
+    panel(root, () => api("/api/market/monitor"), (d) => {
+      const r = d.regime, vix = d.volatility && d.volatility.VIX, fg = d.fear_greed, br = d.breadth, aa = d.aaii, v = d.valuation || {}, c = d.credit || {}, t = d.technicals;
+      const tone = r.points >= 6 ? "negative" : r.points >= 3 ? "warn" : "positive";
+      const cards = [
+        card("Fear & Greed", fg ? `<div class="mval">${esc(fg.score.toFixed(0))}/100</div><div class="sub">${esc(fg.rating || "")}</div>` : '<div class="mval">N/A</div>'),
+        card("Put / Call", `<div class="mval">${esc(na(d.put_call, f2))}</div>`),
+        card("AAII sentiment", aa ? `<div class="mval">${esc(aa.bullish.toFixed(1))}% bull</div><div class="sub">${esc(aa.bearish.toFixed(1))}% bear · spread ${esc(aa.spread.toFixed(1))}</div>` : '<div class="mval">N/A</div>'),
+        card("S&P 500 breadth", br ? `<div class="mval">${esc(br.above_200_pct.toFixed(0))}% &gt; 200D</div><div class="sub">${br.advancing} up · ${br.declining} down of ${br.total}</div>` : '<div class="mval">N/A</div>'),
+        card("VIX", vix ? `<div class="mval">${esc(f2(vix.value))}</div><div class="sub">${esc(na(vix.change, (x) => (x >= 0 ? "+" : "") + x.toFixed(2)))} today</div>` : '<div class="mval">N/A</div>'),
+        card("Valuation (SPY)", `<div class="sub">P/E ${esc(na(v.pe, f2))} · Fwd ${esc(na(v.forward_pe, f2))} · CAPE ${esc(na(v.cape, f2))}</div>`),
+        card("Rates & credit", `<div class="sub">10Y–2Y ${esc(na(c.curve_10y2y, f2))} · HY OAS ${esc(na(c.hy_oas, f2))} · IG OAS ${esc(na(c.ig_oas, f2))}</div>`),
+        card("SPY technicals", t ? `<div class="sub">ATR14 ${esc(f2(t.atr14))} · BB width ${esc(na(t.bb_width, f2))}% · BB pos ${esc(na(t.bb_position, f2))}%</div>` : '<div class="mval">N/A</div>'),
+      ].join("");
+      const vols = Object.entries(d.volatility || {}).map(([k, x]) => ({ name: k, value: x.value, change: x.change }));
+      return `<div class="pad"><span class="badge ${tone}">${esc(r.label)}</span> <strong>Stress score ${r.points}</strong> <span class="sub">(transparent rule count, not a trading signal)</span></div>` +
+        `<ul class="pad reasons">${r.reasons.map((x) => `<li>+${x.points} ${esc(x.reason)}</li>`).join("") || "<li>No stress rules triggered</li>"}</ul>` +
+        `<div class="mgrid">${cards}</div><h3 class="pad">Volatility indexes</h3>` + tableHtml(vols, [S("name", "Index"), N("value", "Level", f2), T("change", "Change", f2)]) + FOOT;
+    });
+  }
+
+  function mountMacro() {
+    const root = $('.page[data-page="macro"] .screen');
+    root.innerHTML = '<h3 class="pad">Federal Reserve &amp; rates</h3><div id="m-fed"></div><h3 class="pad">Economic calendar</h3><div id="m-cal"></div>' + FOOT;
+    panel($("#m-fed"), () => api("/api/market/fed"), (rows) => '<div class="mgrid">' + rows.map((r) => card(r.name,
+      `<div class="mval">${esc(r.value == null ? "N/A" : r.unit === "$B" ? "$" + Math.round(r.value / 1000).toLocaleString() + "B" : r.unit === "%" ? r.value.toFixed(2) + "%" : r.value.toFixed(2))}</div><div class="sub">${esc(r.date || "")}</div>`)).join("") + "</div>");
+    panel($("#m-cal"), () => api("/api/market/calendar"), (d) => {
+      const e = d.economic || {}, news = d.fed_news;
+      const ev = !e.configured ? '<p class="sub pad">Economic calendar isn\'t set up on the server yet.</p>' : e.error ? `<p class="sub pad negative">${esc(e.error)}</p>`
+        : e.events.length ? tableHtml(e.events, [S("date", "Date"), S("event", "Event")]) + '<p class="sub pad">Source: FRED release calendar. Verify release times before relying on them.</p>' : '<p class="sub pad">No CPI, jobs report or FOMC dates in the next 30 days.</p>';
+      const nw = news == null ? '<p class="sub pad">Fed press feed unavailable right now.</p>' : '<ul class="pad news">' + news.map((n) => `<li>${n.link ? `<a href="${esc(n.link)}" target="_blank" rel="noopener noreferrer">${esc(n.title)}</a>` : esc(n.title)} <span class="sub">${esc(n.date)}</span></li>`).join("") + "</ul>";
+      return ev + '<h3 class="pad">Fed monetary-policy news</h3>' + nw;
+    });
+  }
+
   // ---------- stock detail panels ----------
   const label = (k) => k.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
   function fmtVal(k, v) {
@@ -241,6 +299,9 @@
     if (SCREENS[page]) { started.add(page); mountScreen(page); }
     else if (page === "stock") { started.add(page); mountStock(); }
     else if (page === "compare") { started.add(page); mountCompare(); }
+    else if (page === "dashboard") { started.add(page); mountDashboard(); }
+    else if (page === "monitor") { started.add(page); mountMonitor(); }
+    else if (page === "macro") { started.add(page); mountMacro(); }
   });
   window.PRScreens = { candleSvg, SCREENS };
 })();
