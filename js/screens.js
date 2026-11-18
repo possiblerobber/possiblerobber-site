@@ -291,6 +291,149 @@
     load();
   }
 
+  // ---------- personal: portfolio, watchlist, alerts (stored on the server, behind your login) ----------
+  async function send(path, body) {
+    const res = await fetch(API + path, { method: "PUT", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(out.error || "save failed (" + res.status + ")");
+    return out.data;
+  }
+  const usd = (n) => (n == null ? "—" : (n < 0 ? "−" : "") + "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  const sgn = (n) => (n == null ? "" : n >= 0 ? "positive" : "negative");
+  const flash = (el, text, bad) => { el.textContent = text; el.classList.toggle("negative", !!bad); };
+  const PFOOT = '<p class="sub pad">Manual tracker for your own records, not a brokerage connection. Prices come from Yahoo Finance and may be delayed. Educational only, not financial advice.</p>';
+
+  function mountPortfolio() {
+    const root = $('.page[data-page="portfolio"] .screen');
+    root.innerHTML = `<form class="stock-form" id="pf-form">
+        <input id="pf-sym" placeholder="Ticker" maxlength="10" aria-label="Ticker" autocomplete="off" spellcheck="false" required>
+        <input id="pf-shares" type="number" step="any" min="0" placeholder="Shares" aria-label="Shares" style="text-transform:none" required>
+        <input id="pf-cost" type="number" step="any" min="0" placeholder="Cost / share" aria-label="Cost per share" style="text-transform:none" required>
+        <input id="pf-date" type="date" aria-label="Date opened (optional)" style="text-transform:none;width:150px">
+        <button class="btn" type="submit">Add position</button></form>
+      <p class="sub pad" id="pf-msg" role="status"></p><div id="pf-body"></div>` + PFOOT;
+    const msg = (t, bad) => flash($("#pf-msg"), t, bad);
+    const strip = (r) => ({ symbol: r.symbol, shares: r.shares, cost: r.cost, opened: r.opened, note: r.note });
+    const key = (r) => [r.symbol, r.shares, r.cost, r.opened || ""].join("|");
+    let busy = false;
+    function render(d) {
+      const t = d.totals;
+      const cards = [
+        card("Market value", `<div class="mval">${esc(usd(t.value))}</div>`),
+        card("Cost basis", `<div class="mval">${esc(usd(t.cost))}</div>`),
+        card("Total P/L", `<div class="mval ${sgn(t.pnl)}">${esc(usd(t.pnl))}</div><div class="${sgn(t.pnl_pct)}">${esc(pct(t.pnl_pct))}</div>`),
+        card("Day P/L", `<div class="mval ${sgn(t.day_pnl)}">${esc(usd(t.day_pnl))}</div>`),
+      ].join("");
+      if (!d.positions.length) return `<div class="mgrid">${cards}</div><p class="sub pad">No positions yet. Add one above.</p>`;
+      const rows = d.positions.map((r) => `<tr><td>${esc(r.symbol)}</td><td class="num">${esc(r.shares)}</td><td class="num">${esc(usd(r.cost))}</td>
+        <td class="num">${esc(usd(r.price))}</td><td class="num">${esc(usd(r.value))}</td><td class="num ${sgn(r.pnl)}">${esc(usd(r.pnl))}</td>
+        <td class="num ${sgn(r.pnl_pct)}">${esc(pct(r.pnl_pct))}</td><td class="num ${sgn(r.day_change_pct)}">${esc(pct(r.day_change_pct))}</td>
+        <td class="num">${r.weight_pct == null ? "—" : esc(r.weight_pct.toFixed(1)) + "%"}</td><td>${esc(r.opened || "")}</td>
+        <td><button type="button" class="btn small" data-rm="${esc(key(r))}" aria-label="Remove ${esc(r.symbol)}">Remove</button></td></tr>`).join("");
+      const warn = t.missing_prices ? `<p class="sub pad negative">${esc(t.missing_prices)} position(s) have no live price right now and aren't in the totals.</p>` : "";
+      return `<div class="mgrid">${cards}</div>${warn}<div class="table-scroll"><table class="table"><thead><tr><th>Symbol</th><th>Shares</th><th>Cost</th><th>Price</th><th>Value</th><th>P/L</th><th>P/L %</th><th>Day</th><th>Weight</th><th>Opened</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+    async function save(mutator, ok) {
+      if (busy) return; busy = true; msg("Saving…");
+      try {
+        const cur = await api("/api/user/portfolio");
+        const d = await send("/api/user/portfolio", { positions: mutator(cur.positions.map(strip)) });
+        $("#pf-body").innerHTML = render(d); msg(ok);
+      } catch (e) { msg("Couldn't save: " + e.message, true); } finally { busy = false; }
+    }
+    $("#pf-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const symbol = $("#pf-sym").value.trim().toUpperCase(), shares = Number($("#pf-shares").value), cost = Number($("#pf-cost").value);
+      if (!symbol || !(shares > 0) || !(cost >= 0)) return msg("Enter a ticker, shares above 0 and a cost per share.", true);
+      const opened = $("#pf-date").value || null;
+      save((list) => list.concat([{ symbol, shares, cost, opened, note: "" }]), "Added " + symbol + ".").then(() => { if (!$("#pf-msg").classList.contains("negative")) $("#pf-form").reset(); });
+    });
+    $("#pf-body").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-rm]"); if (!b) return;
+      const k = b.dataset.rm; let gone = false;
+      save((list) => list.filter((r) => (!gone && key(r) === k) ? !(gone = true) : true), "Removed.");
+    });
+    panel($("#pf-body"), () => api("/api/user/portfolio"), render);
+  }
+
+  // Alerts: the server checks them whenever this site is open (any page) and marks each one triggered once.
+  const ALERT_TYPES = { price_above: "Price rises to", price_below: "Price falls to", pct_up: "Day move up by", pct_down: "Day move down by" };
+  const alertText = (a) => a.symbol + " " + (a.type === "price_above" ? "≥ " + usd(a.value) : a.type === "price_below" ? "≤ " + usd(a.value)
+    : a.type === "pct_up" ? "up " + a.value + "% or more today" : "down " + a.value + "% or more today");
+  let refreshAlerts = null, pollTimer = null;
+  function notify(list) {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    (list || []).forEach((a) => { try { new Notification("PossibleRobber alert: " + a.symbol, { body: alertText(a) + " (now " + usd(a.current) + ")" }); } catch (_) {} });
+  }
+  async function fetchAlerts() { const d = await api("/api/user/alerts"); notify(d.newly_triggered); return d; }
+  function startPoll() {
+    if (pollTimer || !("Notification" in window) || Notification.permission !== "granted") return;
+    const tick = async () => { try { const d = await fetchAlerts(); if (refreshAlerts) refreshAlerts(d); } catch (_) {} };
+    tick(); pollTimer = setInterval(tick, 120000);
+  }
+
+  function mountWatchlist() {
+    const root = $('.page[data-page="watchlist"] .screen');
+    const typeOpts = Object.entries(ALERT_TYPES).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
+    root.innerHTML = `<h3 class="pad">Watchlist</h3>
+      <form class="stock-form" id="wl-form"><input id="wl-sym" placeholder="Ticker" maxlength="10" aria-label="Ticker" autocomplete="off" spellcheck="false" required><button class="btn" type="submit">Add</button></form>
+      <p class="sub pad" id="wl-msg" role="status"></p><div id="wl-body"></div>
+      <h3 class="pad">Alerts</h3>
+      <form class="stock-form" id="al-form"><input id="al-sym" placeholder="Ticker" maxlength="10" aria-label="Ticker" autocomplete="off" spellcheck="false" required>
+        <select id="al-type" aria-label="Alert type">${typeOpts}</select>
+        <input id="al-val" type="number" step="any" min="0" placeholder="Value" aria-label="Alert value" style="text-transform:none" required>
+        <button class="btn" type="submit">Add alert</button> <button class="btn ghost" type="button" id="al-notify">Enable notifications</button></form>
+      <p class="sub pad" id="al-msg" role="status"></p><div id="al-body"></div>
+      <p class="sub pad">Alerts are checked about every 2 minutes while this site is open in a browser tab, and each fires once. Price alerts use dollars, move alerts use percent. Notifications need your browser's permission; the list below always shows what triggered. Educational only, not financial advice.</p>`;
+    const wmsg = (t, bad) => flash($("#wl-msg"), t, bad), amsg = (t, bad) => flash($("#al-msg"), t, bad);
+    const renderWl = (d) => !d.symbols.length ? '<p class="sub pad">Nothing on your watchlist yet.</p>' :
+      `<div class="table-scroll"><table class="table"><thead><tr><th>Symbol</th><th>Price</th><th>Day</th><th></th></tr></thead><tbody>${d.quotes.map((q) =>
+        `<tr><td>${esc(q.symbol)}</td><td class="num">${esc(usd(q.price))}</td><td class="num ${sgn(q.change_pct)}">${esc(pct(q.change_pct))}</td>
+        <td><button type="button" class="btn small" data-rm="${esc(q.symbol)}" aria-label="Remove ${esc(q.symbol)}">Remove</button></td></tr>`).join("")}</tbody></table></div>`;
+    const renderAl = (d) => !d.alerts.length ? '<p class="sub pad">No alerts yet.</p>' :
+      `<div class="table-scroll"><table class="table"><thead><tr><th>Alert</th><th>Now</th><th>Status</th><th></th></tr></thead><tbody>${d.alerts.map((a) =>
+        `<tr><td>${esc(alertText(a))}</td><td class="num">${esc(usd(a.current))}</td>
+        <td class="${a.triggered ? "positive" : ""}">${a.triggered ? "Triggered " + esc(new Date(a.triggered).toLocaleString()) : a.active ? "Watching" : "Off"}</td>
+        <td><button type="button" class="btn small" data-rm="${esc(a.id)}" aria-label="Delete alert">Delete</button></td></tr>`).join("")}</tbody></table></div>`;
+    let busy = false;
+    async function mutate(path, field, body, mutator, render, target, say, ok) {
+      if (busy) return; busy = true; say("Saving…");
+      try {
+        const cur = await api(path); notify(cur.newly_triggered); const d = await send(path, { [body]: mutator(cur[field]) });
+        $(target).innerHTML = render(d); notify(d.newly_triggered); say(ok); return true;
+      } catch (e) { say("Couldn't save: " + e.message, true); } finally { busy = false; }
+    }
+    $("#wl-form").addEventListener("submit", async (e) => {
+      e.preventDefault(); const s = $("#wl-sym").value.trim().toUpperCase(); if (!s) return;
+      if (await mutate("/api/user/watchlist", "symbols", "symbols", (l) => l.concat([s]), renderWl, "#wl-body", wmsg, "Added " + s + ".")) $("#wl-sym").value = "";
+    });
+    $("#wl-body").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-rm]"); if (!b) return;
+      mutate("/api/user/watchlist", "symbols", "symbols", (l) => l.filter((x) => x !== b.dataset.rm), renderWl, "#wl-body", wmsg, "Removed.");
+    });
+    $("#al-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const symbol = $("#al-sym").value.trim().toUpperCase(), value = Number($("#al-val").value);
+      if (!symbol || !(value > 0)) return amsg("Enter a ticker and a value above 0.", true);
+      const a = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), symbol, type: $("#al-type").value, value, active: true, note: "", triggered: null };
+      if (await mutate("/api/user/alerts", "alerts", "alerts", (l) => l.concat([a]), renderAl, "#al-body", amsg, "Alert added.")) { $("#al-val").value = ""; startPoll(); }
+    });
+    $("#al-body").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-rm]"); if (!b) return;
+      mutate("/api/user/alerts", "alerts", "alerts", (l) => l.filter((x) => x.id !== b.dataset.rm), renderAl, "#al-body", amsg, "Alert deleted.");
+    });
+    $("#al-notify").addEventListener("click", async () => {
+      if (!("Notification" in window)) return amsg("This browser doesn't support notifications.", true);
+      const p = await Notification.requestPermission();
+      amsg(p === "granted" ? "Notifications on for this browser." : "Notifications are blocked. You can allow them in your browser's site settings.", p !== "granted");
+      startPoll();
+    });
+    refreshAlerts = (d) => { $("#al-body").innerHTML = renderAl(d); };
+    panel($("#wl-body"), () => api("/api/user/watchlist"), renderWl);
+    panel($("#al-body"), fetchAlerts, renderAl);
+  }
+  startPoll();
+
   // Lazy-start each screen the first time its nav button is clicked.
   const started = new Set();
   document.addEventListener("click", (e) => {
@@ -302,6 +445,8 @@
     else if (page === "dashboard") { started.add(page); mountDashboard(); }
     else if (page === "monitor") { started.add(page); mountMonitor(); }
     else if (page === "macro") { started.add(page); mountMacro(); }
+    else if (page === "portfolio") { started.add(page); mountPortfolio(); }
+    else if (page === "watchlist") { started.add(page); mountWatchlist(); }
   });
   window.PRScreens = { candleSvg, SCREENS };
 })();
