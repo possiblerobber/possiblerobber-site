@@ -77,11 +77,11 @@
     sp500: { tabs: [["S&P 500 uptrends", "/api/scan/sp500", [
       S("symbol", "Symbol"), S("description", "Name"), S("trend", "Trend"), N("price", "Price", f2), N("change_pct", "Day", pct),
       N("perf_5d", "5D", pct), N("perf_1m", "1M", pct), N("rsi", "RSI", f2), N("avg_volume", "Avg vol", big), N("score", "Score", f2)]]] },
-    squeeze: { note: "Heuristic 0–100 score of how squeeze-prone a stock looks. Short interest is reported about twice a month, so it is ~2 weeks old (see report date). Borrow fee and utilization aren't available from free sources. Not a prediction or advice.",
+    squeeze: { sort: true, note: "Heuristic 0–100 score of how squeeze-prone a stock looks. Short interest is reported about twice a month, so it is ~2 weeks old (see report date). Borrow fee and utilization aren't available from free sources. Not a prediction or advice.",
       tabs: [["Short squeeze scan", "/api/scan/squeeze", [
       S("symbol", "Symbol"), S("name", "Name"), N("score", "Score", f2), S("risk", "Setup"), N("short_pct_float", "Short % float", f2),
       N("days_to_cover", "Days to cover", f2), N("short_change_pct", "Short Δ mo", pct), N("float_shares", "Float", big),
-      N("rel_volume", "Rel vol", (n) => (n == null ? "—" : n.toFixed(1) + "×")), N("pct_from_52w_high", "From 52w high", f2), S("short_report_date", "Short data as of")]]] },
+      N("shares_short", "Shares short", big), N("rel_volume", "Rel vol", (n) => (n == null ? "—" : n.toFixed(1) + "×")), N("pct_from_52w_high", "From 52w high", f2), S("short_report_date", "Short data as of")]]] },
   };
 
   const UNUSUAL_COLS = [S("symbol", "Symbol"), N("price", "Price", f2), N("change_pct", "Change", pct), N("rel_volume", "Rel vol", (n) => (n == null ? "—" : n.toFixed(2) + "×"))];
@@ -97,15 +97,29 @@
     if (!root) return;
     root.innerHTML = (cfg.note ? `<p class="sub pad">${esc(cfg.note)}</p>` : "") +
       (cfg.tabs.length > 1 ? `<div class="controls tabs">${cfg.tabs.map((t, i) => `<button type="button" data-i="${i}">${esc(t[0])}</button>`).join("")}</div>` : "") +
-      '<div class="screen-body"></div><div class="screen-foot sub pad"></div>';
-    const body = $(".screen-body", root), foot = $(".screen-foot", root);
+      '<div class="stock-form" id="sortbar" hidden></div><div class="screen-body"></div><div class="screen-foot sub pad"></div>';
+    const body = $(".screen-body", root), foot = $(".screen-foot", root), bar = $("#sortbar", root);
+    let cur = [], curCols = [], sortKey = "", sortDir = -1;
+    async function draw() {
+      const rows = sortKey ? cur.slice().sort((a, b) => ((a[sortKey] == null) - (b[sortKey] == null)) || sortDir * ((a[sortKey] ?? 0) - (b[sortKey] ?? 0))) : cur;
+      await showTable(body, rows, curCols);
+    }
+    function drawBar() {
+      if (!cfg.sort) return;
+      const nums = curCols.filter((c) => c.num);
+      bar.hidden = false;
+      bar.innerHTML = '<b>Sort by</b> <select id="sort-key" aria-label="Sort by"><option value="">Default (score)</option>' + nums.map((c) => `<option value="${esc(c.key)}"${c.key === sortKey ? " selected" : ""}>${esc(c.label)}</option>`).join("") +
+        `</select> <button type="button" class="btn ghost" id="sort-dir">${sortDir < 0 ? "High to low" : "Low to high"}</button>`;
+    }
+    bar.addEventListener("change", (e) => { if (e.target.id === "sort-key") { sortKey = e.target.value; draw(); } });
+    bar.addEventListener("click", (e) => { if (e.target.id === "sort-dir") { sortDir = -sortDir; e.target.textContent = sortDir < 0 ? "High to low" : "Low to high"; draw(); } });
     async function select(i) {
       root.querySelectorAll(".tabs button").forEach((b, j) => b.classList.toggle("active", i === j));
       const [, path, cols] = cfg.tabs[i];
       body.innerHTML = '<p class="sub pad">Loading…</p>'; foot.textContent = "";
       try {
-        const rows = await api(path);
-        await showTable(body, rows, cols);
+        cur = await api(path); curCols = cols; sortKey = ""; drawBar();
+        await draw();
         foot.textContent = "Updated " + new Date().toLocaleTimeString() + " · Educational information only, not financial advice. Data may be delayed.";
       } catch (e) { body.innerHTML = `<p class="sub pad negative">Couldn't load data: ${esc(e.message)}</p>`; }
     }
