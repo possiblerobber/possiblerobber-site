@@ -1,5 +1,5 @@
 /* Perspective "Market view" panel.
- * Not loaded by default. Enable it by following INSTALL-PERSPECTIVE.md (step 5).
+ * Loaded by index.html. Initialises Perspective the first time the Market view tab opens.
  * Uses DEMO rows only — swap `rows` for data from your own backend.
  */
 import "https://cdn.jsdelivr.net/npm/@perspective-dev/viewer/dist/cdn/perspective-viewer.js";
@@ -26,9 +26,9 @@ async function start() {
   const viewer = mount.querySelector("perspective-viewer");
 
   const worker = await perspective.worker();
-  const table  = worker.table(rows);
-  await viewer.load(table);
-  await viewer.restore({ plugin: "Datagrid", theme: "Pro Dark" });
+  await worker.table(rows, { name: "market" });
+  await viewer.load(worker);
+  await viewer.restore({ table: "market", plugin: "Datagrid", theme: "Pro Dark" });
 }
 
 // Only spin up Perspective the first time the Market view tab is opened.
