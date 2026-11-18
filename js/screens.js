@@ -84,6 +84,14 @@
       N("rel_volume", "Rel vol", (n) => (n == null ? "—" : n.toFixed(1) + "×")), N("pct_from_52w_high", "From 52w high", f2), S("short_report_date", "Short data as of")]]] },
   };
 
+  const UNUSUAL_COLS = [S("symbol", "Symbol"), N("price", "Price", f2), N("change_pct", "Change", pct), N("rel_volume", "Rel vol", (n) => (n == null ? "—" : n.toFixed(2) + "×"))];
+  SCREENS.scanners = { tabs: [
+    ["Unusual activity", "/api/scan/unusual", UNUSUAL_COLS],
+    ["Breakouts", "/api/scan/breakouts", [S("symbol", "Symbol"), S("direction", "Direction"), N("price", "Price", f2), N("level", "20-day level", f2), N("rel_volume", "Rel vol", (n) => (n == null ? "—" : n.toFixed(2) + "×"))]],
+    ["Options flow", "/api/scan/flow", [S("symbol", "Symbol"), N("call_put_ratio", "Call/Put", f2), N("call_volume", "Call vol", big), N("put_volume", "Put vol", big), S("expiration", "Expiry")]],
+    ["Momentum", "/api/scan/momentum", [S("symbol", "Symbol"), S("description", "Name"), N("price", "Price", f2), N("change_pct", "Day", pct), N("rsi", "RSI", f2), N("perf_5d", "5D", pct), N("perf_1m", "1M", pct), N("avg_volume", "Avg vol", big)]],
+  ] };
+
   function mountScreen(page) {
     const cfg = SCREENS[page], root = $(`.page[data-page="${page}"] .screen`);
     if (!root) return;
@@ -139,6 +147,52 @@
     return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(d.symbol)} candlestick chart">${s}</svg>`;
   }
 
+  // ---------- stock detail panels ----------
+  const label = (k) => k.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+  function fmtVal(k, v) {
+    if (v == null || v === "") return "—";
+    if (typeof v === "number") {
+      if (/(market_cap|revenue$|fcf|volume|shares|value)/.test(k)) return big(v);
+      if (/(growth|margin|roe|yield)/.test(k)) return (v * 100).toFixed(2) + "%";
+      if (/change/.test(k)) return pct(v);
+      return Number.isInteger(v) ? String(v) : v.toFixed(2);
+    }
+    return String(v);
+  }
+  const kv = (obj, skip = []) => '<dl class="kv">' + Object.entries(obj).filter(([k, v]) => !skip.includes(k) && (v == null || typeof v !== "object"))
+    .map(([k, v]) => `<div><dt>${esc(label(k))}</dt><dd>${esc(fmtVal(k, v))}</dd></div>`).join("") + "</dl>";
+  const holderTable = (rows, cols) => { const d = document.createElement("div"); plainTable(d, rows, cols); return d.innerHTML; };
+
+  const DETAIL = {
+    analysis: (d) => `<p class="pad"><strong>Score ${d.score}/100</strong> · ${esc(d.trend)} <span class="sub">(informational signal mix, not a recommendation)</span></p>` +
+      `<ul class="pad reasons">${d.reasons.map((r) => `<li>${esc(r)}</li>`).join("") || "<li>No strong signals</li>"}</ul>` +
+      `<p class="pad sub">Support: ${d.support.map((x) => x.toFixed(2)).join(", ") || "—"} · Resistance: ${d.resistance.map((x) => x.toFixed(2)).join(", ") || "—"}</p>`,
+    technicals: (d) => kv(d, ["symbol"]),
+    fundamentals: (d) => `<p class="pad"><strong>${esc(d.name)}</strong> <span class="sub">${esc(d.sector || "")} ${esc(d.industry ? "· " + d.industry : "")}</span></p>` + kv(d, ["symbol", "name", "sector", "industry"]),
+    timeframes: (d) => holderTable(d, [S("timeframe", "Timeframe"), N("price", "Price", f2), N("ma20", "MA20", f2), S("trend", "Trend")]),
+    news: (d) => d.length ? '<ul class="pad news">' + d.map((n) => `<li>${n.url ? `<a href="${esc(n.url)}" target="_blank" rel="noopener noreferrer">${esc(n.title)}</a>` : esc(n.title)}</li>`).join("") + "</ul>" : '<p class="pad sub">No recent news.</p>',
+    earnings: (d) => d.length ? holderTable(d, [S("field", "Field"), S("value", "Value")]) : '<p class="pad sub">No earnings calendar available.</p>',
+    options: (d) => kv(d, ["symbol"]),
+    holders: (d) => "<h3 class=\"pad\">Institutional holders</h3>" + holderTable(d.holders, [S("holder", "Holder"), N("shares", "Shares", big), N("value", "Value", big), S("date", "Reported")]) +
+      "<h3 class=\"pad\">Insider transactions</h3>" + holderTable(d.insiders, [S("insider", "Insider"), S("transaction", "Transaction"), N("shares", "Shares", big), N("value", "Value", big)]) +
+      "<h3 class=\"pad\">Ownership summary</h3>" + holderTable(d.major, [S("label", "Item"), S("value", "Value")]),
+  };
+  const DETAIL_TABS = [["analysis", "Analysis"], ["technicals", "Technicals"], ["fundamentals", "Fundamentals"], ["timeframes", "Timeframes"], ["news", "News"], ["earnings", "Earnings"], ["options", "Options"], ["holders", "Holders"]];
+
+  function mountCompare() {
+    const root = $('.page[data-page="compare"] .screen');
+    root.innerHTML = `<form class="stock-form" id="cmp-form"><input id="cmp-input" value="NVDA AMD AVGO" maxlength="60" aria-label="Tickers" style="width:240px" autocomplete="off" spellcheck="false">
+      <button type="submit" class="btn">Compare</button><span class="sub">2–4 tickers</span></form><div id="cmp-body"></div>`;
+    $("#cmp-form").addEventListener("submit", async (e) => {
+      e.preventDefault(); const body = $("#cmp-body"); body.innerHTML = '<p class="sub pad">Loading…</p>';
+      try {
+        const rows = await api("/api/compare?symbols=" + encodeURIComponent($("#cmp-input").value.trim().replace(/\s+/g, ",")));
+        plainTable(body, rows, [S("symbol", "Symbol"), S("name", "Name"), N("price", "Price", f2), N("pe", "P/E", f2), N("peg", "PEG", f2), N("rsi", "RSI", f2),
+          N("change_5d", "5D", pct), N("change_1m", "1M", pct), N("change_1y", "1Y", pct), N("market_cap", "Mkt cap", big), S("trend", "Trend")]);
+      } catch (err) { body.innerHTML = `<p class="sub pad negative">Couldn't compare: ${esc(err.message)}</p>`; }
+    });
+  }
+
   function mountStock() {
     const root = $('.page[data-page="stock"] .screen');
     root.innerHTML = `
@@ -148,8 +202,18 @@
       <div id="stock-summary" class="sub pad"></div><div id="stock-chart" class="chart-wrap"></div>
       <div class="chart-legend pad"><span><i class="dot up"></i>Up</span><span><i class="dot down"></i>Down</span>
         <span style="color:#f5c451">— MA20</span><span style="color:#6aa8ff">— MA50</span><span style="color:#35d39a">- - Support</span><span style="color:#ff687a">- - Resistance</span></div>
-      <p class="sub pad">Support/resistance are clustered pivot levels from the candles shown, not predictions. Educational only.</p>`;
-    let tf = "1Y";
+      <p class="sub pad">Support/resistance are clustered pivot levels from the candles shown, not predictions. Educational only.</p>
+      <div class="controls tabs" id="stock-detail-tabs">${DETAIL_TABS.map(([k, t]) => `<button type="button" data-k="${k}">${t}</button>`).join("")}</div>
+      <div id="stock-detail" class="detail"></div>`;
+    let tf = "1Y", kind = "analysis";
+    async function loadDetail() {
+      const sym = $("#stock-input").value.trim().toUpperCase(), box = $("#stock-detail"); if (!sym) return;
+      $("#stock-detail-tabs").querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.k === kind));
+      box.innerHTML = '<p class="sub pad">Loading…</p>';
+      try { box.innerHTML = DETAIL[kind](await api(`/api/stock/${encodeURIComponent(sym)}/${kind}`)); }
+      catch (e) { box.innerHTML = `<p class="sub pad negative">Couldn't load ${esc(label(kind).toLowerCase())}: ${esc(e.message)}</p>`; }
+    }
+    $("#stock-detail-tabs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { kind = b.dataset.k; loadDetail(); } });
     async function load() {
       const sym = $("#stock-input").value.trim().toUpperCase(); if (!sym) return;
       $("#stock-chart").innerHTML = '<p class="sub pad">Loading…</p>'; $("#stock-summary").textContent = "";
@@ -158,6 +222,7 @@
         const first = d.candles[0].o, last = d.candles[d.candles.length - 1].c, ch = (last - first) / first * 100;
         $("#stock-summary").innerHTML = `<strong>${esc(d.symbol)}</strong> · ${last.toFixed(2)} · <span class="${ch >= 0 ? "positive" : "negative"}">${pct(ch)} over ${esc(d.timeframe)}</span>`;
         $("#stock-chart").innerHTML = candleSvg(d);
+        loadDetail();
       } catch (e) { $("#stock-chart").innerHTML = `<p class="sub pad negative">Couldn't load ${esc(sym)}: ${esc(e.message)}</p>`; }
     }
     $("#stock-form").addEventListener("submit", (e) => { e.preventDefault(); load(); });
@@ -175,6 +240,7 @@
     const page = b.dataset.page; if (started.has(page)) return;
     if (SCREENS[page]) { started.add(page); mountScreen(page); }
     else if (page === "stock") { started.add(page); mountStock(); }
+    else if (page === "compare") { started.add(page); mountCompare(); }
   });
   window.PRScreens = { candleSvg, SCREENS };
 })();
