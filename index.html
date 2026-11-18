@@ -28,6 +28,8 @@
         <button type="button" data-page="sp500"><b>⌕</b> S&amp;P 500 scan</button>
         <button type="button" data-page="squeeze"><b>⚡</b> Short squeeze</button>
         <button type="button" data-page="stock"><b>◔</b> Stock chart</button>
+        <button type="button" data-page="compare"><b>⇄</b> Compare</button>
+        <button type="button" data-page="scanners"><b>◎</b> Scanners</button>
         <button type="button" data-page="watchlist"><b>☆</b> Watchlist</button>
         <button type="button" data-page="journal"><b>▤</b> Paper journal</button>
       </nav>
@@ -43,7 +45,7 @@
 
     <div class="side-note">
       <strong>Educational mode</strong><br>
-      Sample figures only. Connect a permitted market-data source before relying on any quote or signal.
+      Overview and Market view show sample figures. Movers, scanners, charts and stock pages use live data that can be delayed. Informational only, not advice.
     </div>
   </aside>
 
@@ -59,7 +61,7 @@
       </div>
       <div class="top-right">
         <span class="pill">US Equities</span>
-        <span class="pill demo">● DEMO DATA</span>
+        <span class="pill demo" id="data-pill">● DEMO DATA</span>
       </div>
     </header>
 
@@ -171,6 +173,8 @@
     <div class="page" data-page="sp500" hidden><div class="card screen"></div></div>
     <div class="page" data-page="squeeze" hidden><div class="card screen"></div></div>
     <div class="page" data-page="stock" hidden><div class="card screen"></div></div>
+    <div class="page" data-page="compare" hidden><div class="card screen"></div></div>
+    <div class="page" data-page="scanners" hidden><div class="card screen"></div></div>
     <div class="page" data-page="watchlist" hidden><div class="card placeholder"><h2>Watchlist</h2><p>Coming soon.</p></div></div>
     <div class="page" data-page="journal" hidden><div class="card placeholder"><h2>Paper-trading journal</h2><p>Coming soon.</p></div></div>
     <div class="page" data-page="risk" hidden><div class="card placeholder"><h2>Risk concepts</h2><p>Coming soon.</p></div></div>
