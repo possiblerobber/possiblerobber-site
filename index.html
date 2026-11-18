@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PossibleRobber — Market Terminal</title>
-  <meta name="description" content="PossibleRobber market education workspace. Demo figures only.">
+  <meta name="description" content="PossibleRobber market education workspace. Educational information only.">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/screens.css">
   <link rel="stylesheet" crossorigin="anonymous" href="https://cdn.jsdelivr.net/npm/@perspective-dev/viewer/dist/css/themes.css">
@@ -23,7 +23,6 @@
       <div class="tag">Workspace</div>
       <nav class="nav" aria-label="Workspace">
         <button type="button" class="active" aria-current="page" data-page="overview"><b>◫</b> Overview</button>
-        <button type="button" data-page="markets"><b>⌁</b> Market view</button>
         <button type="button" data-page="dashboard"><b>▦</b> Market dashboard</button>
         <button type="button" data-page="monitor"><b>♡</b> Risk monitor</button>
         <button type="button" data-page="macro"><b>⌂</b> Macro &amp; Fed</button>
@@ -49,7 +48,7 @@
 
     <div class="side-note">
       <strong>Educational mode</strong><br>
-      Overview and Market view show sample figures. Movers, scanners, charts and stock pages use live data that can be delayed. Informational only, not advice.
+      Data comes from public sources and can be delayed or unavailable. Informational only, not advice.
     </div>
   </aside>
 
@@ -65,112 +64,12 @@
       </div>
       <div class="top-right">
         <span class="pill">US Equities</span>
-        <span class="pill demo" id="data-pill">● DEMO DATA</span>
+        <span class="pill live" id="data-pill">● LIVE · may be delayed</span>
       </div>
     </header>
 
-    <!-- ===== Overview ===== -->
-    <div class="page" data-page="overview">
-      <section class="metrics">
-        <div class="card">
-          <div class="metric-label">S&amp;P 500 · SPY</div>
-          <div class="metric">592.41</div>
-          <div class="sub positive">+0.64% <span class="muted">sample session</span></div>
-        </div>
-        <div class="card">
-          <div class="metric-label">NASDAQ · QQQ</div>
-          <div class="metric">511.82</div>
-          <div class="sub positive">+0.91% <span class="muted">sample session</span></div>
-        </div>
-        <div class="card">
-          <div class="metric-label">Market breadth</div>
-          <div class="metric">58.2%</div>
-          <div class="sub">Advancers in sample universe</div>
-        </div>
-        <div class="card">
-          <div class="metric-label">Volatility context</div>
-          <div class="metric">Moderate</div>
-          <div class="sub">Illustrative classification</div>
-        </div>
-      </section>
-
-      <section class="main-grid">
-        <div class="card">
-          <div class="section-head">
-            <div>
-              <div class="eyebrow">Selected instrument</div>
-              <div class="symbol-row">
-                <span class="ticker" id="chart-symbol">NVDA</span>
-                <span class="muted" id="chart-name">NVIDIA Corporation</span>
-              </div>
-            </div>
-            <div class="price" id="chart-price">$142.68</div>
-          </div>
-          <div class="section-head">
-            <div class="sub positive" id="chart-change">+1.82% · sample data</div>
-            <div class="controls" id="timeframes">
-              <button type="button">1D</button>
-              <button type="button" class="active">5D</button>
-              <button type="button">1M</button>
-              <button type="button">3M</button>
-              <button type="button">1Y</button>
-            </div>
-          </div>
-          <div class="chart-wrap">
-            <svg id="chart" viewBox="0 0 800 270" preserveAspectRatio="none" role="img" aria-label="Illustrative candlestick chart"></svg>
-          </div>
-          <div class="chart-legend">
-            <span><i class="dot up"></i>Up candle</span>
-            <span><i class="dot down"></i>Down candle</span>
-            <span>Illustrative price path</span>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="section-head"><h2>Watchlist</h2><span class="sub">Select a symbol</span></div>
-          <div class="watchlist" id="watchlist"><!-- rendered by js/app.js --></div>
-        </div>
-      </section>
-
-      <section class="lower">
-        <div class="card">
-          <div class="section-head"><h2>Market checklist</h2><span class="badge warn">Review, don't predict</span></div>
-          <table class="table">
-            <thead><tr><th>Factor</th><th>What to review</th><th>Status</th></tr></thead>
-            <tbody>
-              <tr><td>Trend</td><td>Price vs. moving averages</td><td><span class="badge">Neutral</span></td></tr>
-              <tr><td>Momentum</td><td>RSI and MACD context</td><td><span class="badge warn">Mixed</span></td></tr>
-              <tr><td>Volume</td><td>Relative volume vs. average</td><td><span class="badge">Normal</span></td></tr>
-              <tr><td>Volatility</td><td>ATR and opening range</td><td><span class="badge warn">Elevated</span></td></tr>
-            </tbody>
-          </table>
-          <p class="sub">Checklist labels are placeholders, not live readings or trade recommendations.</p>
-        </div>
-
-        <div class="card">
-          <div class="section-head"><h2>Risk &amp; market literacy</h2><span class="sub">Concepts to understand</span></div>
-          <div class="watchlist">
-            <div class="watch-row"><div><div class="watch-symbol">Volatility</div><div class="watch-name">Prices can move sharply in either direction</div></div><span class="badge warn">Uncertain</span></div>
-            <div class="watch-row"><div><div class="watch-symbol">Liquidity</div><div class="watch-name">Trading activity can affect execution prices</div></div><span class="badge">Context</span></div>
-            <div class="watch-row"><div><div class="watch-symbol">Gap risk</div><div class="watch-name">Prices may open far from the prior close</div></div><span class="badge warn">Important</span></div>
-            <div class="watch-row"><div><div class="watch-symbol">News risk</div><div class="watch-name">Company and economic news can change expectations</div></div><span class="badge">Monitor</span></div>
-          </div>
-          <p class="sub">This section explains market risks; it does not calculate trades or recommend positions.</p>
-        </div>
-      </section>
-    </div>
-
-    <!-- ===== Market view: Perspective mounts here (see INSTALL-PERSPECTIVE.md) ===== -->
-    <div class="page" data-page="markets" hidden>
-      <div class="card">
-        <div id="perspective-mount">
-          <div class="placeholder">
-            <h2>Market view</h2>
-            <p>Loading market data…</p>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- ===== Overview (live; built by js/screens.js) ===== -->
+    <div class="page" data-page="overview"><div class="card screen"></div></div>
 
     <!-- ===== Placeholder pages ===== -->
     <div class="page" data-page="dashboard" hidden><div class="card screen"></div></div>
@@ -188,13 +87,12 @@
     <div class="page" data-page="risk" hidden><div class="card placeholder"><h2>Risk concepts</h2><p>Coming soon.</p></div></div>
     <div class="page" data-page="notes" hidden><div class="card placeholder"><h2>Research notes</h2><p>Coming soon.</p></div></div>
 
-    <div class="footer">POSSIBLEROBBER · Market education workspace · Demo figures are not live market data</div>
+    <div class="footer">POSSIBLEROBBER · Market education workspace · Educational only, not financial advice · Data may be delayed</div>
   </main>
 </div>
 
 <script src="js/config.js"></script>
 <script src="js/app.js"></script>
 <script src="js/screens.js"></script>
-<script type="module" src="js/perspective-market.js"></script>
 </body>
 </html>
