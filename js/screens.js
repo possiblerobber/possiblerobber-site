@@ -320,11 +320,22 @@
         <input id="pf-cost" type="number" step="any" min="0" placeholder="Cost / share" aria-label="Cost per share" style="text-transform:none" required>
         <input id="pf-date" type="date" aria-label="Date opened (optional)" style="text-transform:none;width:150px">
         <button class="btn" type="submit">Add position</button></form>
-      <p class="sub pad" id="pf-msg" role="status"></p><div id="pf-body"></div><div id="pf-push"></div>` + PFOOT;
+      <form class="stock-form" id="pf-sell" hidden>
+        <b id="pf-sell-title">Record a sale</b>
+        <input id="pf-sell-sym" placeholder="Ticker" maxlength="10" aria-label="Ticker sold" autocomplete="off" spellcheck="false" required>
+        <input id="pf-sell-shares" type="number" step="any" min="0" placeholder="Shares sold" aria-label="Shares sold" style="text-transform:none" required>
+        <input id="pf-sell-price" type="number" step="any" min="0" placeholder="Sell price" aria-label="Sell price per share" style="text-transform:none" required>
+        <input id="pf-sell-date" type="date" aria-label="Sale date" style="text-transform:none;width:150px" required>
+        <input id="pf-sell-cost" type="number" step="any" min="0" placeholder="Your cost / share (only if not held)" aria-label="Cost per share, only needed if you no longer hold it" style="text-transform:none;width:230px">
+        <button class="btn" type="submit">Record sale</button> <button class="btn ghost" type="button" id="pf-sell-cancel">Cancel</button></form>
+      <p class="sub pad" id="pf-msg" role="status"></p><div id="pf-body"></div><div id="pf-sales"></div><div id="pf-push"></div>` + PFOOT;
     const msg = (t, bad) => flash($("#pf-msg"), t, bad);
     const strip = (r) => ({ symbol: r.symbol, shares: r.shares, cost: r.cost, opened: r.opened, note: r.note });
     const key = (r) => [r.symbol, r.shares, r.cost, r.opened || ""].join("|");
-    let busy = false, profiles = [], current = "main", armed = false;
+    let busy = false, profiles = [], current = "main", armed = false, lastRows = [], sales = null;
+    const pad2 = (n) => String(n).padStart(2, "0");
+    const isoToday = () => { const n = new Date(); return n.getFullYear() + "-" + pad2(n.getMonth() + 1) + "-" + pad2(n.getDate()); };
+    const cal = { y: new Date().getFullYear(), m: new Date().getMonth() };
     try { current = localStorage.getItem("pr-profile") || "main"; } catch (_) {}
     const pname = (id) => (profiles.find((x) => x.id === id) || {}).name || id;
     function drawProfiles() {
@@ -333,11 +344,11 @@
       const tabs = profiles.concat(profiles.length > 1 ? [{ id: "all", name: "All (combined)" }] : []);
       $("#pf-tabs").innerHTML = '<b style="margin-right:4px">Portfolios:</b>' + tabs.map((x) => `<button type="button" role="tab" class="btn${x.id === current ? "" : " ghost"}" data-pid="${esc(x.id)}" aria-selected="${x.id === current}">${esc(x.name)}</button>`).join("");
       const all = current === "all";
-      $("#pf-form").hidden = all;
+      $("#pf-form").hidden = all; if (all) $("#pf-sell").hidden = true;
       $('#pf-profiles [data-act="rename"]').disabled = all; $('#pf-profiles [data-act="delete"]').disabled = all || profiles.length < 2;
     }
     function render(d) {
-      const t = d.totals, all = d.profile === "all";
+      const t = d.totals, all = d.profile === "all"; lastRows = d.positions;
       const cards = [
         card("Market value", `<div class="mval">${esc(usd(t.value))}</div>`),
         card("Cost basis", `<div class="mval">${esc(usd(t.cost))}</div>`),
@@ -352,7 +363,7 @@
         <td class="num">${esc(usd(r.value))}</td><td class="num">${esc(usd(r.cost_total))}</td>
         <td class="num">${r.weight_pct == null ? "—" : esc(r.weight_pct.toFixed(1)) + "%"}</td>
         <td class="num">${esc(r.shares)}</td><td class="num">${esc(usd(r.cost))}</td><td>${esc(r.opened || "")}</td>
-        <td>${all ? "" : `<button type="button" class="btn small" data-rm="${esc(key(r))}" aria-label="Remove ${esc(r.symbol)}">Remove</button>`}</td></tr>`; }).join("");
+        <td>${all ? "" : `<button type="button" class="btn small" data-sell="${esc(r.symbol)}" aria-label="Sell ${esc(r.symbol)}">Sell</button> <button type="button" class="btn small ghost" data-rm="${esc(key(r))}" aria-label="Remove ${esc(r.symbol)}">Remove</button>`}</td></tr>`; }).join("");
       const warn = t.missing_prices ? `<p class="sub pad negative">${esc(t.missing_prices)} position(s) have no live price right now and aren't in the totals.</p>` : "";
       return `<div class="mgrid">${cards}</div>${warn}<div class="table-scroll"><table class="table"><thead><tr>${all ? "<th>Profile</th>" : ""}<th>Ticker</th><th>Price</th><th>Day $</th><th>Day %</th><th>P/L $</th><th>P/L %</th><th>Value</th><th>Cost</th><th>Weight</th><th>Shares</th><th>Avg cost</th><th>Opened</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
     }
@@ -360,7 +371,7 @@
       let d;
       try { d = await api("/api/user/portfolio?profile=" + encodeURIComponent(current)); }
       catch (e) { if (current === "main" || !/unknown profile/.test(e.message)) throw e; current = "main"; d = await api("/api/user/portfolio?profile=main"); }
-      profiles = d.profiles; drawProfiles(); $("#pf-body").innerHTML = render(d); return d;
+      profiles = d.profiles; drawProfiles(); $("#pf-body").innerHTML = render(d); loadSales(); return d;
     }
     async function save(mutator, ok) {
       if (busy) return; busy = true; msg("Saving…");
@@ -416,9 +427,74 @@
       }, "").then((ok) => { if (ok) { msg((merged ? "Combined with your existing " : "Added ") + symbol + (merged ? " position (average cost updated)." : " to " + pname(current) + ".")); $("#pf-form").reset(); } });
     });
     $("#pf-body").addEventListener("click", (e) => {
+      const sb = e.target.closest("button[data-sell]");
+      if (sb) {
+        const r = lastRows.find((x) => x.symbol === sb.dataset.sell); openSell(r ? r.symbol : sb.dataset.sell, r && r.shares, r && r.price); return;
+      }
       const b = e.target.closest("button[data-rm]"); if (!b) return;
       const k = b.dataset.rm; let gone = false;
       save((list) => list.filter((r) => (!gone && key(r) === k) ? !(gone = true) : true), "Removed.");
+    });
+    function openSell(symbol, shares, price) {
+      $("#pf-sell").hidden = false;
+      $("#pf-sell-title").textContent = symbol ? "Sell " + symbol : "Log a past sale";
+      $("#pf-sell-sym").value = symbol || ""; $("#pf-sell-shares").value = shares || ""; $("#pf-sell-price").value = price == null ? "" : price;
+      $("#pf-sell-date").value = isoToday(); $("#pf-sell-cost").value = "";
+      $(symbol ? "#pf-sell-shares" : "#pf-sell-sym").focus();
+    }
+    $("#pf-sell-cancel").addEventListener("click", () => { $("#pf-sell").hidden = true; });
+    $("#pf-sell").addEventListener("submit", async (e) => {
+      e.preventDefault(); if (busy) return;
+      const body = { profile: current, symbol: $("#pf-sell-sym").value.trim().toUpperCase(), shares: Number($("#pf-sell-shares").value),
+        price: Number($("#pf-sell-price").value), date: $("#pf-sell-date").value };
+      if ($("#pf-sell-cost").value !== "") body.cost = Number($("#pf-sell-cost").value);
+      busy = true; msg("Saving…");
+      try {
+        sales = await send("/api/user/sell", body); $("#pf-sell").hidden = true; busy = false;
+        const mine = sales.trades.find((t) => t.symbol === body.symbol && t.date === body.date);
+        cal.y = Number(body.date.slice(0, 4)); cal.m = Number(body.date.slice(5, 7)) - 1;
+        await loadView(); msg("Sale recorded" + (mine ? ": " + (mine.pnl >= 0 ? "gain " : "loss ") + usd(Math.abs(mine.pnl)) + "." : "."));
+      } catch (err) { busy = false; msg("Couldn't record sale: " + err.message, true); }
+    });
+    const cv = (v) => (v < 0 ? "−" : "+") + "$" + Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: Math.abs(v) >= 100 ? 0 : 2 });
+    function renderSales() {
+      const el = $("#pf-sales"), all = current === "all";
+      if (!sales) { el.innerHTML = ""; return; }
+      const T = sales.totals, byDay = {};
+      sales.trades.forEach((t) => { byDay[t.date] = (byDay[t.date] || 0) + t.pnl; });
+      const first = new Date(cal.y, cal.m, 1), days = new Date(cal.y, cal.m + 1, 0).getDate();
+      let cells = "", month = 0, traded = 0;
+      for (let i = 0; i < first.getDay(); i++) cells += '<div class="cal-cell empty"></div>';
+      for (let d = 1; d <= days; d++) {
+        const v = byDay[cal.y + "-" + pad2(cal.m + 1) + "-" + pad2(d)];
+        if (v != null) { month += v; traded++; }
+        cells += `<div class="cal-cell${v == null ? "" : v >= 0 ? " win" : " loss"}"><span class="d">${d}</span>${v == null ? "" : `<span class="v">${esc(cv(v))}</span>`}</div>`;
+      }
+      const label = first.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+      const rows = sales.trades.map((t) => `<tr><td>${esc(t.date)}</td>${all ? `<td>${esc(t.profile_name)}</td>` : ""}<td>${esc(t.symbol)}</td><td class="num">${esc(t.shares)}</td>
+        <td class="num">${esc(usd(t.price))}</td><td class="num">${esc(usd(t.cost))}</td><td class="num ${sgn(t.pnl)}">${esc(usd(t.pnl))}</td>
+        <td class="num ${sgn(t.pnl_pct)}">${esc(pct(t.pnl_pct))}</td><td class="num">${esc(usd(t.proceeds))}</td>
+        <td><button type="button" class="btn small ghost" data-del="${esc(t.id)}" aria-label="Delete sale of ${esc(t.symbol)}">Delete</button></td></tr>`).join("");
+      el.innerHTML = `<h3 class="pad">Sales log &amp; P/L calendar</h3>
+        <div class="mgrid">${card("Realized P/L", `<div class="mval ${sgn(T.pnl)}">${esc(usd(T.pnl))}</div>`)}${card("Sales", `<div class="mval">${esc(T.count)}</div><div class="sub">${esc(T.wins)} gains, ${esc(T.losses)} losses</div>`)}${card(label, `<div class="mval ${sgn(month)}">${esc(usd(month))}</div><div class="sub">${esc(traded)} day(s) with sales</div>`)}</div>
+        <div class="stock-form"><button type="button" class="btn ghost" data-cal="-1" aria-label="Previous month">‹</button><b>${esc(label)}</b><button type="button" class="btn ghost" data-cal="1" aria-label="Next month">›</button>
+          ${all ? "" : '<button type="button" class="btn ghost" data-past="1">Log a past sale</button>'}</div>
+        <div class="cal" role="grid" aria-label="Realized profit and loss by day">${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((x) => `<div class="cal-h">${x}</div>`).join("")}${cells}</div>
+        ${rows ? `<div class="table-scroll"><table class="table"><thead><tr><th>Date</th>${all ? "<th>Profile</th>" : ""}<th>Ticker</th><th>Shares</th><th>Sold at</th><th>Avg cost</th><th>P/L $</th><th>P/L %</th><th>Proceeds</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="sub pad">No sales yet. Click Sell on a position above, or Log a past sale.</p>'}
+        <p class="sub pad">Realized P/L only: it counts the gain or loss on shares when you sell them, using your average cost. Deleting a log entry doesn't put the shares back.</p>`;
+    }
+    async function loadSales() {
+      try { sales = await api("/api/user/trades?profile=" + encodeURIComponent(current)); renderSales(); }
+      catch (e) { $("#pf-sales").innerHTML = `<p class="sub pad negative">Couldn't load the sales log: ${esc(e.message)}</p>`; }
+    }
+    $("#pf-sales").addEventListener("click", async (e) => {
+      const n = e.target.closest("button[data-cal]");
+      if (n) { cal.m += Number(n.dataset.cal); if (cal.m < 0) { cal.m = 11; cal.y--; } if (cal.m > 11) { cal.m = 0; cal.y++; } renderSales(); return; }
+      if (e.target.closest("button[data-past]")) { openSell("", "", null); return; }
+      const dl = e.target.closest("button[data-del]"); if (!dl || busy) return;
+      busy = true; msg("Saving…");
+      try { sales = await send("/api/user/trade-delete", { id: dl.dataset.del, profile: current }); renderSales(); msg("Sale removed from the log."); }
+      catch (err) { msg("Couldn't delete: " + err.message, true); } finally { busy = false; }
     });
     loadView().catch((e) => { $("#pf-body").innerHTML = `<p class="sub pad negative">Couldn't load data: ${esc(e.message)}</p>`; });
     const push = $("#pf-push"), pmsg = (t, bad) => flash($("#pa-msg"), t, bad);
