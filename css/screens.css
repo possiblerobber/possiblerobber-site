@@ -25,3 +25,9 @@
 .mval{font-size:20px;font-weight:700;margin:4px 0;font-variant-numeric:tabular-nums}
 .screen h3{font-size:13px;margin:14px 0 0;color:#8b98a9}
 .badge.positive{color:#35d39a}.badge.negative{color:#ff687a}.badge.warn{color:#f5c451}
+.stock-form select{background:var(--panel-2,#121a24);color:inherit;border:1px solid #263444;border-radius:8px;padding:8px 10px;font:inherit}
+.btn.small{padding:4px 10px;font-size:12px}
+.btn.ghost{background:transparent;color:inherit;border:1px solid #263444}
+.screen td button.btn{background:transparent;color:#8b98a9;border:1px solid #263444;border-radius:6px;padding:4px 10px;cursor:pointer}
+.mval.positive{color:#35d39a}.mval.negative{color:#ff687a}
+td.positive{color:#35d39a}
