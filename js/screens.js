@@ -330,7 +330,7 @@
         <button class="btn" type="submit">Record sale</button> <button class="btn ghost" type="button" id="pf-sell-cancel">Cancel</button></form>
       <p class="sub pad" id="pf-msg" role="status"></p><div id="pf-body"></div><div id="pf-sales"></div><div id="pf-push"></div>` + PFOOT;
     const msg = (t, bad) => flash($("#pf-msg"), t, bad);
-    const strip = (r) => ({ symbol: r.symbol, shares: r.shares, cost: r.cost, opened: r.opened, note: r.note });
+    const strip = (r) => ({ symbol: r.symbol, shares: r.shares, cost: r.cost, opened: r.opened, note: r.note, checked: r.checked });
     const key = (r) => [r.symbol, r.shares, r.cost, r.opened || ""].join("|");
     let busy = false, profiles = [], current = "main", armed = false, lastRows = [], sales = null;
     const pad2 = (n) => String(n).padStart(2, "0");
@@ -365,7 +365,8 @@
         <td class="num">${esc(r.shares)}</td><td class="num">${esc(usd(r.cost))}</td><td>${esc(r.opened || "")}</td>
         <td>${all ? "" : `<button type="button" class="btn small" data-sell="${esc(r.symbol)}" aria-label="Sell ${esc(r.symbol)}">Sell</button> <button type="button" class="btn small ghost" data-rm="${esc(key(r))}" aria-label="Remove ${esc(r.symbol)}">Remove</button>`}</td></tr>`; }).join("");
       const warn = t.missing_prices ? `<p class="sub pad negative">${esc(t.missing_prices)} position(s) have no live price right now and aren't in the totals.</p>` : "";
-      return `<div class="mgrid">${cards}</div>${warn}<div class="table-scroll"><table class="table"><thead><tr>${all ? "<th>Profile</th>" : ""}<th>Ticker</th><th>Price</th><th>Day $</th><th>Day %</th><th>P/L $</th><th>P/L %</th><th>Value</th><th>Cost</th><th>Weight</th><th>Shares</th><th>Avg cost</th><th>Opened</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      const sp = (d.splits || []).length ? `<p class="sub pad">Adjusted automatically for stock splits: ${esc(d.splits.map((x) => x.symbol + " " + x.label + " on " + x.date + " (" + x.shares_before + " → " + x.shares_after + " shares)").join("; "))}.</p>` : "";
+      return `<div class="mgrid">${cards}</div>${warn}${sp}<div class="table-scroll"><table class="table"><thead><tr>${all ? "<th>Profile</th>" : ""}<th>Ticker</th><th>Price</th><th>Day $</th><th>Day %</th><th>P/L $</th><th>P/L %</th><th>Value</th><th>Cost</th><th>Weight</th><th>Shares</th><th>Avg cost</th><th>Opened</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
     }
     async function loadView() {
       let d;
@@ -422,7 +423,7 @@
         if (i < 0) return list.concat([{ symbol, shares, cost, opened, note: "" }]);
         merged = true; const o = list[i], n = o.shares + shares;
         const first = [o.opened, opened].filter(Boolean).sort()[0] || null;
-        const m = { symbol, shares: n, cost: Math.round(((o.shares * o.cost + shares * cost) / n) * 1e6) / 1e6, opened: first, note: o.note || "" };
+        const m = { symbol, shares: n, cost: Math.round(((o.shares * o.cost + shares * cost) / n) * 1e6) / 1e6, opened: first, note: o.note || "", checked: o.checked };
         return list.map((r, k) => (k === i ? m : r));
       }, "").then((ok) => { if (ok) { msg((merged ? "Combined with your existing " : "Added ") + symbol + (merged ? " position (average cost updated)." : " to " + pname(current) + ".")); $("#pf-form").reset(); } });
     });
