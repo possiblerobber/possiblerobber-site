@@ -21,6 +21,8 @@
     sp500:     "S&P 500 scan",
     squeeze:   "Short squeeze scanner",
     stock:     "Stock chart",
+    compare:   "Compare stocks",
+    scanners:  "Scanners",
     watchlist: "Watchlist",
     journal:   "Paper-trading journal",
     risk:      "Risk concepts",
@@ -109,6 +111,9 @@
     });
     $$(".page").forEach((p) => { p.hidden = p.dataset.page !== page; });
     $("#page-title").textContent = PAGE_TITLES[page] || PAGE_TITLES.overview;
+    const live = ["movers", "sp500", "squeeze", "stock", "compare", "scanners"].includes(page);
+    const pill = $("#data-pill");
+    if (pill) { pill.textContent = live ? "● LIVE · may be delayed" : "● DEMO DATA"; pill.classList.toggle("demo", !live); }
     $("#sidebar").classList.remove("open");
   }
 
