@@ -308,8 +308,8 @@
 
   function mountPortfolio() {
     const root = $('.page[data-page="portfolio"] .screen');
-    root.innerHTML = `<div class="stock-form" id="pf-profiles">
-        <select id="pf-profile" aria-label="Portfolio profile"></select>
+    root.innerHTML = `<div class="stock-form" id="pf-tabs" role="tablist" aria-label="Portfolios"></div>
+      <div class="stock-form" id="pf-profiles">
         <input id="pf-pname" placeholder="Profile name" maxlength="30" aria-label="Profile name" style="text-transform:none;width:150px">
         <button class="btn ghost" type="button" data-act="add">Add profile</button>
         <button class="btn ghost" type="button" data-act="rename">Rename</button>
@@ -330,8 +330,8 @@
     function drawProfiles() {
       if (current !== "all" && !profiles.some((x) => x.id === current)) current = profiles.length ? profiles[0].id : "main";
       try { localStorage.setItem("pr-profile", current); } catch (_) {}
-      $("#pf-profile").innerHTML = profiles.map((x) => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("") + (profiles.length > 1 ? '<option value="all">All profiles (combined)</option>' : "");
-      $("#pf-profile").value = current;
+      const tabs = profiles.concat(profiles.length > 1 ? [{ id: "all", name: "All (combined)" }] : []);
+      $("#pf-tabs").innerHTML = '<b style="margin-right:4px">Portfolios:</b>' + tabs.map((x) => `<button type="button" role="tab" class="btn${x.id === current ? "" : " ghost"}" data-pid="${esc(x.id)}" aria-selected="${x.id === current}">${esc(x.name)}</button>`).join("");
       const all = current === "all";
       $("#pf-form").hidden = all;
       $('#pf-profiles [data-act="rename"]').disabled = all; $('#pf-profiles [data-act="delete"]').disabled = all || profiles.length < 2;
@@ -378,8 +378,9 @@
       const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 16) || "profile";
       let id = base, n = 2; while (profiles.some((x) => x.id === id) || id === "all") id = base + "-" + n++; return id;
     };
-    $("#pf-profile").addEventListener("change", () => {
-      current = $("#pf-profile").value; armed = false;
+    $("#pf-tabs").addEventListener("click", (e) => {
+      const tb = e.target.closest("button[data-pid]"); if (!tb || tb.dataset.pid === current) return;
+      current = tb.dataset.pid; armed = false;
       try { localStorage.setItem("pr-profile", current); } catch (_) {}
       drawProfiles(); msg(""); $("#pf-body").innerHTML = '<p class="sub pad">Loading…</p>';
       loadView().catch((e) => { $("#pf-body").innerHTML = `<p class="sub pad negative">Couldn't load: ${esc(e.message)}</p>`; });
@@ -401,7 +402,15 @@
       const symbol = $("#pf-sym").value.trim().toUpperCase(), shares = Number($("#pf-shares").value), cost = Number($("#pf-cost").value);
       if (!symbol || !(shares > 0) || !(cost >= 0)) return msg("Enter a ticker, shares above 0 and a cost per share.", true);
       const opened = $("#pf-date").value || null;
-      save((list) => list.concat([{ symbol, shares, cost, opened, note: "" }]), "Added " + symbol + " to " + pname(current) + ".").then((ok) => { if (ok) $("#pf-form").reset(); });
+      let merged = false;
+      save((list) => {
+        const i = list.findIndex((r) => r.symbol === symbol);
+        if (i < 0) return list.concat([{ symbol, shares, cost, opened, note: "" }]);
+        merged = true; const o = list[i], n = o.shares + shares;
+        const first = [o.opened, opened].filter(Boolean).sort()[0] || null;
+        const m = { symbol, shares: n, cost: Math.round(((o.shares * o.cost + shares * cost) / n) * 1e6) / 1e6, opened: first, note: o.note || "" };
+        return list.map((r, k) => (k === i ? m : r));
+      }, "").then((ok) => { if (ok) { msg((merged ? "Combined with your existing " : "Added ") + symbol + (merged ? " position (average cost updated)." : " to " + pname(current) + ".")); $("#pf-form").reset(); } });
     });
     $("#pf-body").addEventListener("click", (e) => {
       const b = e.target.closest("button[data-rm]"); if (!b) return;
