@@ -1,0 +1,13 @@
+.screen .pad{padding:10px 14px;margin:0}
+.screen .tabs{flex-wrap:wrap;gap:6px;padding:10px 14px}
+.screen-body{min-height:200px}
+.screen .table-scroll{overflow-x:auto}
+.screen td.num,.screen th{white-space:nowrap}
+.screen td.num{text-align:right;font-variant-numeric:tabular-nums}
+.screen .pv{height:520px;width:100%;display:block}
+.stock-form{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 14px}
+.stock-form input{background:var(--panel-2,#121a24);color:inherit;border:1px solid #263444;border-radius:8px;padding:8px 10px;width:110px;text-transform:uppercase;font:inherit}
+.stock-form .btn{background:var(--green,#35d39a);color:#06120d;border:0;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
+#stock-chart svg{width:100%;height:auto;display:block}
+.negative{color:var(--red,#ff687a)}
+#stock-chart.chart-wrap,#stock-chart.chart-wrap svg{height:auto!important}
