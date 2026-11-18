@@ -341,17 +341,18 @@
       const cards = [
         card("Market value", `<div class="mval">${esc(usd(t.value))}</div>`),
         card("Cost basis", `<div class="mval">${esc(usd(t.cost))}</div>`),
-        card("Total P/L", `<div class="mval ${sgn(t.pnl)}">${esc(usd(t.pnl))}</div><div class="${sgn(t.pnl_pct)}">${esc(pct(t.pnl_pct))}</div>`),
         card("Day P/L", `<div class="mval ${sgn(t.day_pnl)}">${esc(usd(t.day_pnl))}</div>${t.day_pct == null ? "" : `<div class="${sgn(t.day_pct)}">${esc(pct(t.day_pct))}</div>`}`),
+        card("Total P/L", `<div class="mval ${sgn(t.pnl)}">${esc(usd(t.pnl))}</div><div class="${sgn(t.pnl_pct)}">${esc(pct(t.pnl_pct))}</div>`),
       ].join("");
       if (!d.positions.length) return `<div class="mgrid">${cards}</div><p class="sub pad">No positions in ${esc(all ? "any profile" : pname(d.profile))} yet.${all ? "" : " Add one above."}</p>`;
       const rows = d.positions.map((r) => `<tr>${all ? `<td>${esc(r.profile_name)}</td>` : ""}<td>${esc(r.symbol)}</td><td class="num">${esc(r.shares)}</td><td class="num">${esc(usd(r.cost))}</td>
-        <td class="num">${esc(usd(r.price))}</td><td class="num">${esc(usd(r.value))}</td><td class="num ${sgn(r.pnl)}">${esc(usd(r.pnl))}</td>
-        <td class="num ${sgn(r.pnl_pct)}">${esc(pct(r.pnl_pct))}</td><td class="num ${sgn(r.day_change_pct)}">${esc(pct(r.day_change_pct))}</td>
+        <td class="num">${esc(usd(r.price))}</td><td class="num">${esc(usd(r.value))}</td><td class="num ${sgn(r.day_change_pct)}">${esc(pct(r.day_change_pct))}</td>
+        <td class="num ${sgn(r.pnl)}">${esc(usd(r.pnl))}</td>
+        <td class="num ${sgn(r.pnl_pct)}">${esc(pct(r.pnl_pct))}</td>
         <td class="num">${r.weight_pct == null ? "—" : esc(r.weight_pct.toFixed(1)) + "%"}</td><td>${esc(r.opened || "")}</td>
         <td>${all ? "" : `<button type="button" class="btn small" data-rm="${esc(key(r))}" aria-label="Remove ${esc(r.symbol)}">Remove</button>`}</td></tr>`).join("");
       const warn = t.missing_prices ? `<p class="sub pad negative">${esc(t.missing_prices)} position(s) have no live price right now and aren't in the totals.</p>` : "";
-      return `<div class="mgrid">${cards}</div>${warn}<div class="table-scroll"><table class="table"><thead><tr>${all ? "<th>Profile</th>" : ""}<th>Symbol</th><th>Shares</th><th>Cost</th><th>Price</th><th>Value</th><th>P/L</th><th>P/L %</th><th>Day</th><th>Weight</th><th>Opened</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      return `<div class="mgrid">${cards}</div>${warn}<div class="table-scroll"><table class="table"><thead><tr>${all ? "<th>Profile</th>" : ""}<th>Symbol</th><th>Shares</th><th>Cost</th><th>Price</th><th>Value</th><th>Day</th><th>P/L</th><th>P/L %</th><th>Weight</th><th>Opened</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
     }
     async function loadView() {
       let d;
