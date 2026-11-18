@@ -35,3 +35,4 @@ td.positive{color:#35d39a}
 .linkbtn:hover{text-decoration:underline}
 .chk{display:flex;gap:8px;align-items:center}
 .stock-form .chk input{width:auto}
+.stock-form[hidden]{display:none}
